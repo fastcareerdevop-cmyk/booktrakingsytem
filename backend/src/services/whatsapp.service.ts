@@ -70,6 +70,15 @@ export function buildTeleobiPayload(student: WhatsAppStudent, items: WhatsAppIte
     rowNumber: 2,
     rowData,
     type: 'EDIT',
+    phone: cleanNumber,
+    mobile: cleanNumber,
+    phoneNumber: `+${cleanNumber}`,
+    studentName: student.name,
+    trackingId: student.trackingId,
+    orderCode: student.orderCode || '',
+    books: bookNames.join(' & '),
+    product: orderName,
+    dispatchDate,
   };
 }
 
@@ -79,6 +88,7 @@ export async function sendOrderWhatsAppMessage(student: WhatsAppStudent, items: 
   const cleanNumber = normalizedDigits.length === 10 ? `91${normalizedDigits}` : normalizedDigits;
 
   if (!cleanNumber) {
+    console.warn(`[WHATSAPP] Skipping order: No valid mobile number for ${student.name}`);
     return { sent: false, reason: 'NO_MOBILE' };
   }
 
@@ -97,6 +107,7 @@ export async function sendOrderWhatsAppMessage(student: WhatsAppStudent, items: 
   }
 
   const payload = buildTeleobiPayload(student, items);
+  console.info(`[WHATSAPP] Sending to ${cleanNumber} (${student.name}) via Teleobi webhook...`);
 
   const response = await fetch(webhookUrl, {
     method: 'POST',
@@ -110,13 +121,15 @@ export async function sendOrderWhatsAppMessage(student: WhatsAppStudent, items: 
   const text = await response.text();
 
   if (!response.ok) {
+    console.error(`[WHATSAPP] Teleobi webhook failed (HTTP ${response.status}): ${text}`);
     throw new Error(`WhatsApp webhook failed: ${response.status} ${text}`);
   }
   if (/parameter of type text is missing text value/i.test(text)) {
+    console.error(`[WHATSAPP] Teleobi template parameter rejected: ${text}`);
     throw new Error(`Teleobi rejected the WhatsApp template parameters: ${text}`);
   }
 
-  console.info(`[WHATSAPP] Teleobi webhook accepted request (HTTP ${response.status}).`);
+  console.info(`[WHATSAPP] Teleobi webhook response (HTTP ${response.status}): ${text.slice(0, 300)}`);
 
   return {
     sent: true,
