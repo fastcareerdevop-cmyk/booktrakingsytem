@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import ExcelJS from 'exceljs';
 import mongoose from 'mongoose';
 import { ImportBatch, Order, BookStock } from '../models';
-import { normalizeBookCode, normalizeTrackingId, normalizeMobileNumber, normalizeEmail } from '../utils/normalize';
+import { normalizeBookCode, normalizeTrackingId, normalizeMobileNumber, normalizeEmail, resolveCourierTracking } from '../utils/normalize';
 import { logAudit } from '../utils/audit';
 import { sendOrderEmail } from './email.service';
 import { sendOrderWhatsAppMessage } from './whatsapp.service';
@@ -216,7 +216,14 @@ export async function parseAndPreviewExcel(
       columnMap['courierTrackingUrl'] = colNumber;
     }
     // Courier company/name (e.g. "Couriered Through", "Courier", "Carrier", "Courier / Parcel")
-    else if (val.includes('courier') || val.includes('carrier') || val.includes('parcel') || val.includes('couried')) {
+    else if (
+      val.includes('courier') ||
+      val.includes('carrier') ||
+      val.includes('parcel') ||
+      val.includes('couried') ||
+      val.includes('through') ||
+      val.includes('tourght')
+    ) {
       columnMap['courier'] = colNumber;
     }
     // Tracking ID / AWB / Barcode
@@ -398,25 +405,21 @@ export async function parseAndPreviewExcel(
       });
     }
 
-    // Fallback 2: If courier name is known, supply official tracking portal
-    if (!courierTrackingUrl && courierName) {
-      const c = courierName.toLowerCase();
-      if (c.includes('dtdc')) {
-        courierTrackingUrl = 'https://www.dtdc.com/track-your-shipment/';
-      } else if (c.includes('trackon')) {
-        courierTrackingUrl = 'https://trackon.in/';
-      } else if (c.includes('delhivery')) {
-        courierTrackingUrl = 'https://www.delhivery.com/';
-      } else if (c.includes('post') || c.includes('speed post')) {
-        courierTrackingUrl = 'https://www.indiapost.gov.in/';
-      }
+    // Fallback 2: If courierName is still empty, scan row cells for any known courier keywords
+    if (!courierName) {
+      row.eachCell((cell) => {
+        const strVal = String(cell.value || '').trim();
+        if (/dtdc/i.test(strVal)) courierName = 'DTDC';
+        else if (/track[ou]n/i.test(strVal)) courierName = 'Trackon';
+        else if (/india\s*post|speed\s*post/i.test(strVal)) courierName = 'India Post';
+        else if (/delhivery/i.test(strVal)) courierName = 'Delhivery';
+      });
     }
 
-    if (!courierName && courierTrackingUrl) {
-      if (courierTrackingUrl.includes('dtdc')) courierName = 'DTDC';
-      else if (courierTrackingUrl.includes('trackon')) courierName = 'Trackon';
-      else if (courierTrackingUrl.includes('delhivery')) courierName = 'Delhivery';
-    }
+    // Auto-resolve Courier Name & Tracking Link (DTDC, Trackon, India Post, Delhivery)
+    const courierResolved = resolveCourierTracking(courierName, courierTrackingUrl);
+    courierName = courierResolved.courierName;
+    courierTrackingUrl = courierResolved.courierTrackingUrl;
 
     if (!studentName) rowErrors.push('Student name is required.');
     if (!mobileNumber) {

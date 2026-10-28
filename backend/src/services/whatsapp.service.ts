@@ -1,4 +1,5 @@
 import { ENV } from '../config/env';
+import { resolveCourierTracking } from '../utils/normalize';
 
 type WhatsAppStudent = {
   name: string;
@@ -44,21 +45,9 @@ export function buildTeleobiPayload(student: WhatsAppStudent, items: WhatsAppIte
     : bookNames.join(' & ');
   const textOrFallback = (value: string | null | undefined, fallback: string) => value?.trim() || fallback;
 
-  const resolvedCourier = textOrFallback(student.courierName, 'DTDC');
-  let resolvedTrackingUrl = (student.courierTrackingUrl || '').trim();
-  if (!resolvedTrackingUrl || resolvedTrackingUrl.toLowerCase() === 'not available') {
-    if (resolvedCourier.toUpperCase().includes('DTDC')) {
-      resolvedTrackingUrl = 'https://www.dtdc.com/track-your-shipment/';
-    } else if (resolvedCourier.toUpperCase().includes('TRACKON')) {
-      resolvedTrackingUrl = 'https://trackon.in/';
-    } else if (resolvedCourier.toUpperCase().includes('DELHIVERY')) {
-      resolvedTrackingUrl = 'https://www.delhivery.com/';
-    } else if (resolvedCourier.toUpperCase().includes('POST')) {
-      resolvedTrackingUrl = 'https://www.indiapost.gov.in/';
-    } else {
-      resolvedTrackingUrl = 'https://www.dtdc.com/track-your-shipment/';
-    }
-  }
+  const courierResult = resolveCourierTracking(student.courierName, student.courierTrackingUrl);
+  const resolvedCourier = courierResult.courierName;
+  const resolvedTrackingUrl = courierResult.courierTrackingUrl;
 
   const rowData: Array<string | number> = [
     1,

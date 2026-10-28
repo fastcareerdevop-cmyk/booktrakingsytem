@@ -38,4 +38,55 @@ describe('Teleobi WhatsApp payload', () => {
     expect(payload.rowData[15]).toBe('Not available');
     expect(payload.rowData[17]).toBe('919892098500');
   });
+
+  it('resolves correct tracking URL for Trackon / trackun', () => {
+    const payload = buildTeleobiPayload(
+      {
+        name: 'Student Name',
+        mobileNumber: '9892098500',
+        trackingId: 'TRACK-123',
+        courierName: 'trackun',
+      },
+      [{ bookCode: 'B1', bookName: 'Book', requiredQuantity: 1, dispatchedQuantity: 1 }]
+    );
+
+    expect(payload.courierName).toBe('Trackon');
+    expect(payload.courierTrackingUrl).toBe('https://www.trackon.in/');
+    expect(payload.rowData[12]).toBe('Trackon');
+    expect(payload.rowData[13]).toBe('https://www.trackon.in/');
+  });
+
+  it('resolves correct tracking URL for India Post', () => {
+    const payload = buildTeleobiPayload(
+      {
+        name: 'Student Name',
+        mobileNumber: '9892098500',
+        trackingId: 'TRACK-123',
+        courierName: 'India Post Speed Post',
+      },
+      [{ bookCode: 'B1', bookName: 'Book', requiredQuantity: 1, dispatchedQuantity: 1 }]
+    );
+
+    expect(payload.courierName).toBe('India Post');
+    expect(payload.courierTrackingUrl).toBe('https://www.indiapost.gov.in/');
+    expect(payload.rowData[12]).toBe('India Post');
+    expect(payload.rowData[13]).toBe('https://www.indiapost.gov.in/');
+  });
+
+  it('resolves correct tracking URL for Couriered Through: DTDC', () => {
+    const payload = buildTeleobiPayload(
+      {
+        name: 'Student Name',
+        mobileNumber: '9892098500',
+        trackingId: 'TRACK-123',
+        courierName: 'Couriered Through: DTDC',
+      },
+      [{ bookCode: 'B1', bookName: 'Book', requiredQuantity: 1, dispatchedQuantity: 1 }]
+    );
+
+    expect(payload.courierName).toBe('DTDC');
+    expect(payload.courierTrackingUrl).toBe('https://www.dtdc.com/track-your-shipment/');
+    expect(payload.rowData[12]).toBe('DTDC');
+    expect(payload.rowData[13]).toBe('https://www.dtdc.com/track-your-shipment/');
+  });
 });
