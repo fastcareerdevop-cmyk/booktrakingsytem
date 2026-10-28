@@ -304,7 +304,13 @@ export const BarcodeSheetPage: React.FC = () => {
           return `
             <article class="student-card">
               <div class="top-row">
-                <div class="barcode">${barcodeSvg}</div>
+                <div class="barcode-col">
+                  <div class="barcode">${barcodeSvg}</div>
+                  <div class="barcode-book-codes">
+                    <span class="lbl">Book Code:</span>
+                    <span class="code-val">${escapeHtml(bookCodes)}</span>
+                  </div>
+                </div>
                 <div class="student">
                   <div class="student-heading">
                     <h2>${escapeHtml(order.studentName)}</h2>
@@ -314,7 +320,6 @@ export const BarcodeSheetPage: React.FC = () => {
                   <p>Student Code: <strong>${escapeHtml(order.orderCode || '-')}</strong></p>
                   <p class="course"><span>Product:</span> ${escapeHtml(courseName)}</p>
                   <p class="product-code"><span>Product Code:</span> ${escapeHtml(productCode)}</p>
-                  <p class="product-code"><span>Book Code:</span> <span class="code-value">${escapeHtml(bookCodes)}</span></p>
                 </div>
               </div>
             </article>
@@ -408,6 +413,7 @@ export const BarcodeSheetPage: React.FC = () => {
               display: grid;
               grid-template-columns: repeat(4, minmax(0, 1fr));
               grid-template-rows: repeat(10, minmax(0, 1fr));
+              grid-auto-flow: column;
               gap: 3px 5px;
             }
             .student-card {
@@ -419,31 +425,65 @@ export const BarcodeSheetPage: React.FC = () => {
               border-radius: 4px;
               break-inside: avoid;
               page-break-inside: avoid;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
             }
             .top-row {
               display: grid;
-              grid-template-columns: minmax(0, 34%) minmax(0, 1fr);
+              grid-template-columns: minmax(0, 42%) minmax(0, 1fr);
               align-items: center;
               gap: 4px;
             }
-            .barcode { min-width: 0; max-width: 100%; overflow: hidden; }
-            .barcode > div { min-width: 0; max-width: 100%; overflow: hidden; }
+            .barcode-col {
+              min-width: 0;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+            }
+            .barcode { min-width: 0; width: 100%; overflow: hidden; display: flex; justify-content: center; }
+            .barcode > div { min-width: 0; width: 100%; overflow: hidden; display: flex; justify-content: center; }
             .student-heading { padding-right: 18px; }
             .serial { position: absolute; top: 0; right: 0; padding: 1px 3px; border: 1px solid #cbd5e1; border-radius: 3px; background: #f8fafc; color: #475569; font-size: 6px; font-weight: 700; }
             .barcode svg {
               display: block;
               width: 100%;
               max-width: 100%;
-              height: 28px;
+              height: 36px;
+            }
+            .barcode-book-codes {
+              width: 100%;
+              margin-top: 1px;
+              padding-top: 1px;
+              border-top: 1px dashed #cbd5e1;
+              font-size: 5.5px;
+              line-height: 1.1;
+              color: #1e1b4b;
+              text-align: center;
+              word-break: break-word;
+              overflow-wrap: anywhere;
+            }
+            .barcode-book-codes .lbl {
+              font-weight: 700;
+              color: #475569;
+              display: inline-block;
+              margin-right: 2px;
+              font-family: Arial, sans-serif;
+            }
+            .barcode-book-codes .code-val {
+              color: #4338ca;
+              font-family: monospace;
+              font-weight: 700;
             }
             .student { position: relative; min-width: 0; overflow-wrap: anywhere; }
-            .student h2 { min-width: 0; margin: 0 0 1px; font-size: 7px; font-weight: 400; line-height: 1.05; }
+            .student h2 { min-width: 0; margin: 0 0 1px; font-size: 7px; font-weight: 700; line-height: 1.05; }
             .student p { margin: 0; color: #64748b; font-size: 5.5px; line-height: 1.05; }
             .student p strong { color: #334155; font-family: monospace; }
             .student .course { margin-top: 1px; color: #334155; font-size: 6px; font-weight: 700; line-height: 1.05; }
             .student .product-code { color: #4338ca; font-family: monospace; font-size: 5.5px; line-height: 1.05; overflow-wrap: anywhere; }
             .student .product-code span:first-child { color: #64748b; font-family: Arial, sans-serif; font-weight: 700; }
-            .code-value { color: #4338ca !important; font-family: monospace; font-weight: 400 !important; }
+            .code-value { color: #4338ca !important; font-family: monospace; font-weight: 700 !important; }
             @media print {
               body { padding: 0; }
               .toolbar { display: none; }
@@ -1367,13 +1407,19 @@ export const BarcodeSheetPage: React.FC = () => {
                   highlightedOrderId === order.id ? 'border-amber-400 ring-2 ring-amber-300' : 'border-slate-200'
                 }`}
               >
-                <div className="grid grid-cols-[minmax(0,36%)_minmax(0,1fr)] items-start gap-2">
-                  <div className="barcode min-w-0 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70 px-1 py-1">
-                    <BarcodeDisplay value={order.orderCode || ''} height={40} width={1.4} fontSize={10} />
+                <div className="grid grid-cols-[minmax(0,42%)_minmax(0,1fr)] items-start gap-2.5">
+                  <div className="barcode min-w-0 max-w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-50/70 p-1.5 flex flex-col items-center">
+                    <BarcodeDisplay value={order.orderCode || ''} height={45} width={1.5} fontSize={10} />
+                    <div className="w-full mt-1.5 pt-1.5 border-t border-dashed border-slate-300 text-center">
+                      <span className="text-[9px] font-semibold text-slate-500 mr-1">Book Code:</span>
+                      <span className="text-[9px] font-mono font-bold text-indigo-700 break-words">
+                        {order.items.map((item) => item.bookCode).filter(Boolean).join(', ') || '-'}
+                      </span>
+                    </div>
                   </div>
                   <div className="student min-w-0">
                     <div className="pr-6">
-                      <h3 className="min-w-0 font-normal text-slate-900 text-xs leading-tight break-words" title={order.studentName}>
+                      <h3 className="min-w-0 font-bold text-slate-900 text-xs leading-tight break-words" title={order.studentName}>
                         {order.studentName}
                       </h3>
                     </div>
@@ -1392,7 +1438,7 @@ export const BarcodeSheetPage: React.FC = () => {
                         #{index + 1}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-0.5 break-words">
+                    <p className="text-[10px] text-slate-500 mt-1 break-words">
                       Tracking ID: <strong className="font-mono text-red-700">{order.trackingId || '-'}</strong>
                     </p>
                     <p className="text-[10px] text-slate-500 mt-0.5 break-all">
@@ -1401,12 +1447,8 @@ export const BarcodeSheetPage: React.FC = () => {
                     <p className="mt-1 text-[10px] font-semibold leading-tight text-slate-800 break-words" title={courseName}>
                       <span className="text-slate-500">Product:</span> {courseName}
                     </p>
-                    <p className="text-[9px] font-mono leading-tight text-indigo-700 break-words">
+                    <p className="text-[9px] font-mono leading-tight text-indigo-700 break-words mt-0.5">
                       <span className="font-sans font-semibold text-slate-500">Product Code:</span> {productCode || '-'}
-                    </p>
-                    <p className="text-[9px] font-mono leading-tight text-indigo-700 break-words">
-                      <span className="font-sans font-semibold text-slate-500">Book Code:</span>{' '}
-                      {order.items.map((item) => item.bookCode).filter(Boolean).join(', ') || '-'}
                     </p>
                   </div>
                 </div>
