@@ -44,6 +44,22 @@ export function buildTeleobiPayload(student: WhatsAppStudent, items: WhatsAppIte
     : bookNames.join(' & ');
   const textOrFallback = (value: string | null | undefined, fallback: string) => value?.trim() || fallback;
 
+  const resolvedCourier = textOrFallback(student.courierName, 'DTDC');
+  let resolvedTrackingUrl = (student.courierTrackingUrl || '').trim();
+  if (!resolvedTrackingUrl || resolvedTrackingUrl.toLowerCase() === 'not available') {
+    if (resolvedCourier.toUpperCase().includes('DTDC')) {
+      resolvedTrackingUrl = 'https://www.dtdc.com/track-your-shipment/';
+    } else if (resolvedCourier.toUpperCase().includes('TRACKON')) {
+      resolvedTrackingUrl = 'https://trackon.in/';
+    } else if (resolvedCourier.toUpperCase().includes('DELHIVERY')) {
+      resolvedTrackingUrl = 'https://www.delhivery.com/';
+    } else if (resolvedCourier.toUpperCase().includes('POST')) {
+      resolvedTrackingUrl = 'https://www.indiapost.gov.in/';
+    } else {
+      resolvedTrackingUrl = 'https://www.dtdc.com/track-your-shipment/';
+    }
+  }
+
   const rowData: Array<string | number> = [
     1,
     dispatchDate,
@@ -57,8 +73,8 @@ export function buildTeleobiPayload(student: WhatsAppStudent, items: WhatsAppIte
     textOrFallback(bookNames.join(' & '), 'Not available'),
     'Books',
     textOrFallback(student.email, 'Not provided'),
-    textOrFallback(student.courierName, 'Not provided'),
-    textOrFallback(student.courierTrackingUrl, 'Not available'),
+    resolvedCourier,
+    resolvedTrackingUrl,
     textOrFallback(orderName, 'Books'),
     textOrFallback(student.orderCode, 'Not available'),
     dispatchDate,
@@ -76,6 +92,9 @@ export function buildTeleobiPayload(student: WhatsAppStudent, items: WhatsAppIte
     studentName: student.name,
     trackingId: student.trackingId,
     orderCode: student.orderCode || '',
+    courierName: resolvedCourier,
+    courierTrackingUrl: resolvedTrackingUrl,
+    trackYourPackageAt: resolvedTrackingUrl,
     books: bookNames.join(' & '),
     product: orderName,
     dispatchDate,

@@ -118,6 +118,8 @@ export async function listOrders(params: ListOrdersParams) {
       emailSentAt: order.emailSentAt,
       whatsappSentAt: order.whatsappSentAt,
       trackingId: order.trackingId,
+      courierName: order.courierName || '',
+      courierTrackingUrl: order.courierTrackingUrl || '',
       importBatchId: order.importBatchId?._id?.toString() || order.importBatchId?.toString(),
       importBatch: order.importBatchId && typeof order.importBatchId === 'object'
         ? {
@@ -412,7 +414,10 @@ export async function getOrderById(orderId: string) {
     mobileNumber: order.mobileNumber,
     email: order.email,
     emailSentAt: order.emailSentAt,
+    whatsappSentAt: order.whatsappSentAt,
     trackingId: order.trackingId,
+    courierName: order.courierName || '',
+    courierTrackingUrl: order.courierTrackingUrl || '',
     importBatchId: order.importBatchId?._id?.toString() || order.importBatchId?.toString(),
     importBatch: order.importBatchId,
     createdAt: order.createdAt,

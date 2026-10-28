@@ -33,8 +33,8 @@ describe('Teleobi WhatsApp payload', () => {
     expect(payload.rowData[7]).toBe(2);
     expect(payload.rowData[9]).toBe('Book One');
     expect(payload.rowData[11]).toBe('Not provided');
-    expect(payload.rowData[12]).toBe('Not provided');
-    expect(payload.rowData[13]).toBe('Not available');
+    expect(payload.rowData[12]).toBe('DTDC');
+    expect(payload.rowData[13]).toBe('https://www.dtdc.com/track-your-shipment/');
     expect(payload.rowData[15]).toBe('Not available');
     expect(payload.rowData[17]).toBe('919892098500');
   });

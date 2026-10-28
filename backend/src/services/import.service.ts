@@ -208,15 +208,15 @@ export async function parseAndPreviewExcel(
     else if (val.includes('email') || val.includes('mail')) {
       columnMap['email'] = colNumber;
     }
-    // Courier tracking URL / link
+    // Courier tracking URL / link (e.g. "Track Your Package at", "Courier Parcel Link", "Tracking Link", etc.)
     else if (
-      (val.includes('courier') || val.includes('tracking') || val.includes('track')) &&
-      (val.includes('url') || val.includes('link') || val.includes('website') || val.includes('web site'))
+      (val.includes('courier') || val.includes('tracking') || val.includes('track') || val.includes('package') || val.includes('shipment') || val.includes('parcel')) &&
+      (val.includes('url') || val.includes('link') || val.includes('website') || val.includes('web site') || val.includes('at') || val.includes('portal') || val.includes('your'))
     ) {
       columnMap['courierTrackingUrl'] = colNumber;
     }
-    // Courier company/name or an ambiguous Courier column, classified by cell value below
-    else if (val.includes('courier') || val.includes('carrier')) {
+    // Courier company/name (e.g. "Couriered Through", "Courier", "Carrier", "Courier / Parcel")
+    else if (val.includes('courier') || val.includes('carrier') || val.includes('parcel') || val.includes('couried')) {
       columnMap['courier'] = colNumber;
     }
     // Tracking ID / AWB / Barcode
@@ -385,8 +385,38 @@ export async function parseAndPreviewExcel(
       ? String(row.getCell(columnMap['courierTrackingUrl']).value || '').trim()
       : '';
     const courierValueIsUrl = /^(https?:\/\/|www\.)/i.test(rawCourier) || /\.[a-z]{2,}(\/|$)/i.test(rawCourier);
-    const courierName = courierValueIsUrl ? '' : rawCourier;
-    const courierTrackingUrl = rawCourierUrl || (courierValueIsUrl ? rawCourier : '');
+    let courierName = courierValueIsUrl ? '' : rawCourier;
+    let courierTrackingUrl = rawCourierUrl || (courierValueIsUrl ? rawCourier : '');
+
+    // Fallback 1: Scan cells for any raw URL if courierTrackingUrl is still missing
+    if (!courierTrackingUrl) {
+      row.eachCell((cell) => {
+        const strVal = String(cell.value || '').trim();
+        if (/^https?:\/\//i.test(strVal) && !courierTrackingUrl) {
+          courierTrackingUrl = strVal;
+        }
+      });
+    }
+
+    // Fallback 2: If courier name is known, supply official tracking portal
+    if (!courierTrackingUrl && courierName) {
+      const c = courierName.toLowerCase();
+      if (c.includes('dtdc')) {
+        courierTrackingUrl = 'https://www.dtdc.com/track-your-shipment/';
+      } else if (c.includes('trackon')) {
+        courierTrackingUrl = 'https://trackon.in/';
+      } else if (c.includes('delhivery')) {
+        courierTrackingUrl = 'https://www.delhivery.com/';
+      } else if (c.includes('post') || c.includes('speed post')) {
+        courierTrackingUrl = 'https://www.indiapost.gov.in/';
+      }
+    }
+
+    if (!courierName && courierTrackingUrl) {
+      if (courierTrackingUrl.includes('dtdc')) courierName = 'DTDC';
+      else if (courierTrackingUrl.includes('trackon')) courierName = 'Trackon';
+      else if (courierTrackingUrl.includes('delhivery')) courierName = 'Delhivery';
+    }
 
     if (!studentName) rowErrors.push('Student name is required.');
     if (!mobileNumber) {
