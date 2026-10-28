@@ -282,7 +282,7 @@ export const BarcodeSheetPage: React.FC = () => {
       })[character] || character);
     const cardElements = Array.from(printContent.children);
     const printedAt = new Date().toLocaleString('en-IN');
-    const cardsPerPage = 50;
+    const cardsPerPage = 40;
     const pagesHtml = Array.from(
       { length: Math.ceil(filteredOrders.length / cardsPerPage) },
       (_, pageIndex) => {
@@ -406,9 +406,9 @@ export const BarcodeSheetPage: React.FC = () => {
               flex: 1;
               min-height: 0;
               display: grid;
-              grid-template-columns: repeat(5, minmax(0, 1fr));
+              grid-template-columns: repeat(4, minmax(0, 1fr));
               grid-template-rows: repeat(10, minmax(0, 1fr));
-              gap: 3px 4px;
+              gap: 3px 5px;
             }
             .student-card {
               min-width: 0;
