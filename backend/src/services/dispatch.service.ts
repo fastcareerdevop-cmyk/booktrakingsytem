@@ -823,3 +823,117 @@ export async function getFailedAttempts(params: {
     },
   };
 }
+
+/* =========================================================================
+   DATE-WISE STOCK DISPATCH HISTORY
+   For each book: opening stock → dispatched on date → closing stock
+========================================================================= */
+export async function getStockDispatchHistory(params: {
+  date?: string;       // YYYY-MM-DD, defaults to today
+  bookCode?: string;   // optional filter by specific book code
+}) {
+  const { date, bookCode } = params;
+
+  // Build date range (full day in IST)
+  const targetDate = date ? new Date(date) : new Date();
+  const dayStart = new Date(targetDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(targetDate);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  // Build book filter
+  const bookFilter: any = {};
+  if (bookCode) {
+    bookFilter.verifiedBookCode = { $regex: new RegExp(bookCode.trim(), 'i') };
+  }
+
+  // 1. Get all dispatch logs for that date
+  const dispatches = await DispatchLog.find({
+    dispatchedAt: { $gte: dayStart, $lte: dayEnd },
+    result: 'SUCCESS',
+    ...bookFilter,
+  })
+    .populate('orderId', 'studentName trackingId orderCode productCode mobileNumber')
+    .populate('employeeId', 'name email')
+    .sort({ dispatchedAt: 1 })
+    .lean();
+
+  // 2. Group by book code
+  const bookMap = new Map<string, {
+    bookCode: string;
+    bookName: string;
+    productCode: string;
+    totalDispatchedToday: number;
+    currentAvailable: number;
+    totalInward: number;
+    totalDispatched: number;
+    dispatches: any[];
+  }>();
+
+  // Get unique book codes dispatched today
+  const uniqueBookCodes = Array.from(new Set(dispatches.map((d: any) => d.verifiedBookCode)));
+
+  // Fetch book stock info for all unique codes
+  const bookStocks = await BookStock.find({
+    bookCode: { $in: uniqueBookCodes },
+  }).lean();
+  const bookStockMap = new Map(bookStocks.map((b: any) => [b.bookCode, b]));
+
+  // Group dispatches per book
+  for (const d of dispatches as any[]) {
+    const bCode = d.verifiedBookCode;
+    if (!bookMap.has(bCode)) {
+      const bs = bookStockMap.get(bCode) as any;
+      bookMap.set(bCode, {
+        bookCode: bCode,
+        bookName: bs?.bookName || bCode,
+        productCode: bs?.productCode || '',
+        totalDispatchedToday: 0,
+        currentAvailable: bs?.availableQuantity ?? 0,
+        totalInward: bs?.totalInward ?? 0,
+        totalDispatched: bs?.totalDispatched ?? 0,
+        dispatches: [],
+      });
+    }
+    const entry = bookMap.get(bCode)!;
+    entry.totalDispatchedToday += d.quantity || 1;
+    entry.dispatches.push({
+      id: d._id?.toString(),
+      dispatchedAt: d.dispatchedAt,
+      studentName: (d.orderId as any)?.studentName || 'Unknown',
+      trackingId: (d.orderId as any)?.trackingId || '',
+      orderCode: (d.orderId as any)?.orderCode || '',
+      mobileNumber: (d.orderId as any)?.mobileNumber || '',
+      employeeName: (d.employeeId as any)?.name || 'Admin',
+      quantity: d.quantity || 1,
+    });
+  }
+
+  // 3. Build result rows — compute opening stock = currentAvailable + totalDispatchedToday
+  const rows = Array.from(bookMap.values()).map((b) => {
+    const openingStock = b.currentAvailable + b.totalDispatchedToday;
+    return {
+      bookCode: b.bookCode,
+      bookName: b.bookName,
+      productCode: b.productCode,
+      openingStock,                         // Stock at start of day (before today's dispatches)
+      totalDispatchedToday: b.totalDispatchedToday,
+      closingStock: b.currentAvailable,     // Current live stock (after today's dispatches)
+      totalInward: b.totalInward,
+      totalDispatchedAllTime: b.totalDispatched,
+      dispatches: b.dispatches,
+    };
+  });
+
+  // Sort by most dispatched today
+  rows.sort((a, b) => b.totalDispatchedToday - a.totalDispatchedToday);
+
+  return {
+    date: dayStart.toISOString().slice(0, 10),
+    dateLabel: dayStart.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }),
+    totalBooksDispatched: rows.reduce((acc, r) => acc + r.totalDispatchedToday, 0),
+    totalOrdersProcessed: new Set(dispatches.map((d: any) => d.orderId?.toString())).size,
+    uniqueBookTitles: rows.length,
+    rows,
+  };
+}

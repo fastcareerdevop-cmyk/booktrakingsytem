@@ -11,6 +11,7 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { Button } from '../../components/common/Button';
 import { DateFilterSelect } from '../../components/common/DateFilterSelect';
 import { DispatchBoxModal } from '../../components/dispatch/DispatchBoxModal';
+import { StockDispatchHistoryModal } from '../../components/dispatch/StockDispatchHistoryModal';
 import {
   Search,
   ArrowRight,
@@ -34,6 +35,7 @@ import {
   Smartphone,
   QrCode,
   Mail,
+  BarChart2,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { playSuccessChime, playErrorTone, playOrderCompleteFanfare, speakVoiceAnnouncement, speakVoiceTwice, speakErrorMessage } from '../../utils/sound';
@@ -67,6 +69,9 @@ export const OutgoingOrdersPage: React.FC = () => {
   const [selectedOrderForDispatch, setSelectedOrderForDispatch] = useState<Order | null>(null);
   const [isDispatchBoxOpen, setIsDispatchBoxOpen] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+
+  // Stock Dispatch History Modal
+  const [showStockHistory, setShowStockHistory] = useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   const handleClearAllData = async () => {
@@ -1270,6 +1275,16 @@ export const OutgoingOrdersPage: React.FC = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           </div>
 
+          {/* 📊 Stock History Button */}
+          <button
+            onClick={() => setShowStockHistory(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-sm whitespace-nowrap"
+            title="Date-wise stock dispatch history — kitni thi, kitni gayi, kitni bachi"
+          >
+            <BarChart2 size={14} />
+            <span>📊 Stock History</span>
+          </button>
+
           <div className="flex flex-wrap items-center gap-3">
             {/* Filter by Excel Batch ("jo exel upload kare vo outgoing sheet me bhi dekhna chahiye") */}
             {importBatches.length > 0 && (
@@ -1545,6 +1560,12 @@ export const OutgoingOrdersPage: React.FC = () => {
         onOrderUpdated={handleOrderUpdated}
         onProceedNextOrder={handleProceedNextOrder}
         hasNextOrder={!!nextOrder}
+      />
+
+      {/* ─── Stock Dispatch History Modal ─── */}
+      <StockDispatchHistoryModal
+        isOpen={showStockHistory}
+        onClose={() => setShowStockHistory(false)}
       />
     </div>
   );

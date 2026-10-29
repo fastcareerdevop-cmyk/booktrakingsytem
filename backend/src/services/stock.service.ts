@@ -1853,9 +1853,10 @@ export async function bulkImportProductsExcel(userId: string, buffer: Buffer) {
     headerMap.set(val, colNumber);
   });
 
+  const normalizeKey = (s: string) => s.toLowerCase().replace(/[\s\-_*]/g, '');
   const getColVal = (row: any, ...aliases: string[]) => {
     for (const a of aliases) {
-      const col = headerMap.get(a.toLowerCase().replace(/[\s\-_]/g, ''));
+      const col = headerMap.get(normalizeKey(a));
       if (col) {
         const c = row.getCell(col);
         return (c.text || c.value?.toString() || '').trim();

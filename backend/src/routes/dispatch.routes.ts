@@ -14,6 +14,7 @@ router.get('/my-history', requireRole('EMPLOYEE', 'ADMIN'), dispatchController.g
 
 // Admin-only global dispatch history & failed verification attempts
 router.get('/history', requireRole('ADMIN'), dispatchController.getHistory);
+router.get('/stock-history', requireRole('ADMIN', 'EMPLOYEE'), dispatchController.getStockDispatchHistory);
 router.get('/failed-attempts', requireRole('ADMIN'), dispatchController.getFailedAttempts);
 
 export default router;

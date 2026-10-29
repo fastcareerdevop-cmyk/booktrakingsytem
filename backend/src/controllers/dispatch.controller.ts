@@ -337,6 +337,19 @@ export async function getMyHistory(req: AuthenticatedRequest, res: Response, nex
   }
 }
 
+export async function getStockDispatchHistory(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const { date, bookCode } = req.query;
+    const result = await dispatchService.getStockDispatchHistory({
+      date: date as string,
+      bookCode: bookCode as string,
+    });
+    return successResponse(res, 'Stock dispatch history retrieved', result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getFailedAttempts(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const { employeeId, dateFilter, startDate, endDate, page, limit } = req.query;
