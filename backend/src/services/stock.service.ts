@@ -2125,43 +2125,26 @@ export async function downloadProductTemplateExcel(): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('Products & Books Template');
 
-  // Title header banner
-  sheet.mergeCells('A1:E1');
-  const title = sheet.getCell('A1');
-  title.value = 'FAST DISPATCH PRO - Product & Book Barcodes Upload Template';
-  title.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
-  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
-  title.alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getRow(1).height = 28;
-
-  // Instructions row
-  sheet.mergeCells('A2:E2');
-  const note = sheet.getCell('A2');
-  note.value =
-    'NOTE: Product Code & Product Name are required. Agar Book Code pehle se hoga to duplicate nahi banega, sirf stock update hoga.';
-  note.font = { italic: true, size: 10, color: { argb: 'FF475569' } };
-  note.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
-  sheet.getRow(2).height = 20;
-
-  // Columns header row (Row 3)
-  const headerRow = sheet.addRow([
-    'Product Code *',
-    'Product Name *',
-    'Book Code',
-    'Book Name',
-    'Stock Quantity (Optional)',
-  ]);
-  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4338CA' } }; // Indigo
-  sheet.getRow(3).height = 24;
-
+  // Headers DIRECTLY in Row 1 (no title/notes above — keeps compatibility with import parser)
   sheet.columns = [
-    { key: 'prdCode', width: 20 },
-    { key: 'prdName', width: 38 },
-    { key: 'bookCode', width: 22 },
-    { key: 'bookName', width: 34 },
-    { key: 'stock', width: 24 },
+    { header: 'Product Code', key: 'prdCode', width: 22 },
+    { header: 'Product Name', key: 'prdName', width: 40 },
+    { header: 'Book Code', key: 'bookCode', width: 22 },
+    { header: 'Book Name', key: 'bookName', width: 36 },
+    { header: 'Stock Quantity', key: 'stock', width: 20 },
   ];
+
+  // Style header row
+  const headerRow = sheet.getRow(1);
+  headerRow.height = 24;
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4338CA' } };
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    cell.border = {
+      bottom: { style: 'medium', color: { argb: 'FF6366F1' } },
+    };
+  });
 
   // Sample data rows
   const samples = [
