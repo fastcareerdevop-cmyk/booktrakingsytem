@@ -21,7 +21,10 @@ import {
   Trash2,
   X,
   Plus,
+  FileSpreadsheet,
+  Upload,
 } from 'lucide-react';
+import { ProductExcelUploadModal } from '../components/stock/ProductExcelUploadModal';
 import { BarcodeDisplay } from '../components/common/BarcodeDisplay';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -87,6 +90,7 @@ export const BarcodeCatalogPage: React.FC = () => {
   const [addBookProductCode, setAddBookProductCode] = useState('');
   const [isAddingBook, setIsAddingBook] = useState(false);
   const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [showBulkProductModal, setShowBulkProductModal] = useState(false);
   const [addProductCode, setAddProductCode] = useState('');
   const [addProductName, setAddProductName] = useState('');
   const [addProductBooks, setAddProductBooks] = useState('');
@@ -1088,14 +1092,25 @@ export const BarcodeCatalogPage: React.FC = () => {
             </button>
           )}
           {isAdmin && (activeTab === 'ALL' || activeTab === 'PRODUCTS') && (
-            <button
-              type="button"
-              onClick={() => setShowAddProductModal(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold whitespace-nowrap"
-            >
-              <Plus size={13} />
-              Add Product Code
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAddProductModal(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold whitespace-nowrap cursor-pointer shadow-2xs"
+              >
+                <Plus size={13} />
+                Add Product Code
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBulkProductModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold whitespace-nowrap cursor-pointer shadow-2xs transition-colors"
+                title="Upload Products & Book Barcodes via Excel (.xlsx)"
+              >
+                <FileSpreadsheet size={13} />
+                <span>Upload Excel</span>
+              </button>
+            </>
           )}
           {/* Search Input */}
           <div className="relative">
@@ -1887,6 +1902,13 @@ export const BarcodeCatalogPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ─── Bulk Product & Books Excel Upload Modal ───────────────────── */}
+      <ProductExcelUploadModal
+        isOpen={showBulkProductModal}
+        onClose={() => setShowBulkProductModal(false)}
+        onSuccess={fetchCatalog}
+      />
     </div>
   );
 };

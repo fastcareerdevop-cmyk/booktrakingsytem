@@ -278,3 +278,28 @@ export async function exportBookHistoryExcel(req: AuthenticatedRequest, res: Res
   }
 }
 
+export async function bulkImportProductsExcel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    if (!req.file || !req.file.buffer) {
+      return errorResponse(res, 'No Excel file uploaded', 'FILE_REQUIRED', 400);
+    }
+
+    const result = await stockService.bulkImportProductsExcel(req.user!.id, req.file.buffer);
+    return successResponse(res, result.message, result, 201);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function downloadProductTemplateExcel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const buffer = await stockService.downloadProductTemplateExcel();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=Product_Book_Upload_Template.xlsx');
+    return res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+}
+
+

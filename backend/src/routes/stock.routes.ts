@@ -38,6 +38,8 @@ router.delete('/clear-all', requireRole('ADMIN'), stockController.clearAllStock)
 router.get('/barcode-catalog', requireRole('ADMIN', 'EMPLOYEE'), stockController.getBarcodeCatalog);
 router.post('/barcode-catalog/book', requireRole('ADMIN'), stockController.addBookBarcode);
 router.post('/barcode-catalog/product', requireRole('ADMIN'), stockController.addProductBarcode);
+router.post('/barcode-catalog/product/bulk-excel', requireRole('ADMIN'), upload.single('file'), stockController.bulkImportProductsExcel);
+router.get('/barcode-catalog/product/template', requireRole('ADMIN', 'EMPLOYEE'), stockController.downloadProductTemplateExcel);
 router.put('/product/:identifier', requireRole('ADMIN', 'EMPLOYEE'), stockController.updateProductDetails);
 router.delete('/product/:identifier', requireRole('ADMIN', 'EMPLOYEE'), stockController.deleteProduct);
 

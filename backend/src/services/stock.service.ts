@@ -1807,3 +1807,382 @@ export async function exportBookHistoryExcel(identifier: string): Promise<Buffer
   return Buffer.from(buffer);
 }
 
+/* =========================================================================
+   BULK IMPORT PRODUCTS & BOOKS VIA EXCEL (प्रोडक्ट व बुक एक्सेल बल्क अपलोड)
+========================================================================= */
+
+/**
+ * Bulk upload products and book barcodes from Excel.
+ * - Creates new product if product code does not exist.
+ * - Existing product is preserved and any new books are attached.
+ * - Creates new book ONLY if book code does not already exist.
+ * - If book code exists, preserves it without duplicating, and updates its stock if quantity is provided.
+ */
+export async function bulkImportProductsExcel(userId: string, buffer: Buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as any);
+  const worksheet = workbook.worksheets[0];
+
+  if (!worksheet) {
+    throw { statusCode: 400, message: 'Excel file is empty', code: 'EMPTY_FILE' };
+  }
+
+  const headerMap = new Map<string, number>();
+
+  // Detect header row (Row 1)
+  worksheet.getRow(1).eachCell((cell, colNumber) => {
+    const val = (cell.text || cell.value?.toString() || '').trim().toLowerCase().replace(/[\s\-_]/g, '');
+    headerMap.set(val, colNumber);
+  });
+
+  const getColVal = (row: any, ...aliases: string[]) => {
+    for (const a of aliases) {
+      const col = headerMap.get(a.toLowerCase().replace(/[\s\-_]/g, ''));
+      if (col) {
+        const c = row.getCell(col);
+        return (c.text || c.value?.toString() || '').trim();
+      }
+    }
+    return '';
+  };
+
+  let totalRows = 0;
+  let productsCreated = 0;
+  let productsExisting = 0;
+  let booksCreated = 0;
+  let booksUpdated = 0;
+  let booksPreserved = 0;
+
+  const newProductsList: string[] = [];
+  const newBooksList: string[] = [];
+  const updatedBooksList: string[] = [];
+  const errors: Array<{ row: number; error: string }> = [];
+
+  const rowDataList: Array<{
+    rowNum: number;
+    productCode: string;
+    productName: string;
+    bookCodes: string[];
+    bookName: string;
+    rawQty: string;
+  }> = [];
+
+  // Parse all rows
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // Skip headers
+
+    const rawProductCode = getColVal(
+      row,
+      'productcode',
+      'product_code',
+      'prdcode',
+      'itemcode',
+      'coursecode',
+      'packagecode',
+      'code'
+    );
+    const rawProductName = getColVal(
+      row,
+      'productname',
+      'product_name',
+      'prdname',
+      'coursename',
+      'packagename',
+      'itemname',
+      'title',
+      'name'
+    );
+    const rawBookCodes = getColVal(
+      row,
+      'bookcode',
+      'book_code',
+      'bookbarcode',
+      'barcode',
+      'books',
+      'includedbooks',
+      'kitabcode'
+    );
+    const rawBookName = getColVal(row, 'bookname', 'book_name', 'booktitle', 'kitabnaam');
+    const rawQty = getColVal(
+      row,
+      'stock',
+      'stockquantity',
+      'availablequantity',
+      'quantity',
+      'qty',
+      'count',
+      'copies',
+      'totalstock'
+    );
+
+    if (!rawProductCode && !rawProductName && !rawBookCodes) {
+      return; // Skip empty row
+    }
+
+    if (!rawProductCode) {
+      errors.push({ row: rowNumber, error: 'Product Code is required' });
+      return;
+    }
+
+    const cleanProductCode = normalizeCode(rawProductCode);
+    const cleanProductName = (rawProductName || cleanProductCode).trim();
+
+    // Split any multiple book codes (e.g. "AF-01, AF-02; AF-03")
+    const bookCodes: string[] = rawBookCodes
+      ? Array.from(
+          new Set(
+            rawBookCodes
+              .split(/[,;/|\n]+/)
+              .map((b: string) => normalizeCode(b))
+              .filter(Boolean)
+          )
+        )
+      : [];
+
+    rowDataList.push({
+      rowNum: rowNumber,
+      productCode: cleanProductCode,
+      productName: cleanProductName,
+      bookCodes,
+      bookName: rawBookName,
+      rawQty,
+    });
+  });
+
+  if (rowDataList.length === 0) {
+    throw {
+      statusCode: 400,
+      message:
+        'Excel sheet me koi valid rows nahi mili. Kripya check karein ki Product Code aur Product Name columns mojood hain.',
+      code: 'NO_VALID_ROWS',
+      errors,
+    };
+  }
+
+  // Process rows
+  for (const item of rowDataList) {
+    totalRows++;
+    const { productCode, productName, bookCodes, bookName, rawQty } = item;
+
+    // 1. Handle Product in ProductCatalog
+    let productDoc = await ProductCatalog.findOne({ productCode });
+    if (!productDoc) {
+      // Create new Product
+      productDoc = await ProductCatalog.create({
+        productCode,
+        productName,
+        books: bookCodes,
+      });
+      productsCreated++;
+      newProductsList.push(`${productName} (${productCode})`);
+    } else {
+      productsExisting++;
+      // Attach any new book codes if provided
+      if (bookCodes.length > 0) {
+        const merged = Array.from(new Set([...(productDoc.books || []), ...bookCodes]));
+        if (merged.length !== (productDoc.books || []).length) {
+          productDoc.books = merged;
+          await productDoc.save();
+        }
+      }
+    }
+
+    // 2. Handle Books in BookStock
+    const hasQty = rawQty !== '' && !isNaN(parseInt(rawQty, 10));
+    const parsedQty = hasQty ? Math.max(0, parseInt(rawQty, 10)) : undefined;
+
+    for (const bCode of bookCodes) {
+      const cleanBCode = normalizeCode(bCode);
+      const existingBook = await BookStock.findOne({ bookCode: cleanBCode });
+
+      if (existingBook) {
+        // Book ALREADY exists: preserve it, DO NOT recreate.
+        // Update stock only if stock quantity was provided in Excel.
+        if (parsedQty !== undefined) {
+          const oldAvailable = existingBook.availableQuantity;
+          existingBook.availableQuantity = parsedQty;
+          if (existingBook.totalInward < existingBook.totalDispatched + parsedQty) {
+            existingBook.totalInward = existingBook.totalDispatched + parsedQty;
+          }
+          if (!existingBook.productCode) {
+            existingBook.productCode = productCode;
+          }
+          existingBook.lastRestockedAt = new Date();
+          await existingBook.save();
+
+          // Log stock change in StockInward for history tracking
+          const diff = parsedQty - oldAvailable;
+          await StockInward.create({
+            bookCode: cleanBCode,
+            bookName: existingBook.bookName,
+            quantity: diff,
+            supplier: 'Excel Product Upload (एक्सेल अपडेट)',
+            remarks: `Stock updated to ${parsedQty} via Product Excel upload (${productCode})`,
+            source: 'EXCEL_UPLOAD',
+            enteredByUserId: new mongoose.Types.ObjectId(userId),
+          });
+
+          booksUpdated++;
+          updatedBooksList.push(`${cleanBCode} (New Stock: ${parsedQty})`);
+        } else {
+          // If no productCode linked yet, link it
+          if (!existingBook.productCode) {
+            existingBook.productCode = productCode;
+            await existingBook.save();
+          }
+          booksPreserved++;
+        }
+      } else {
+        // Book does NOT exist: CREATE NEW BOOK
+        const initialQty = parsedQty !== undefined ? parsedQty : 0;
+        const bTitle = bookName && bookCodes.length === 1 ? bookName.trim() : `${productName} (${cleanBCode})`;
+
+        const newBook = await BookStock.create({
+          bookCode: cleanBCode,
+          bookName: bTitle,
+          productCode: productCode,
+          availableQuantity: initialQty,
+          totalInward: initialQty,
+          totalDispatched: 0,
+          lowStockThreshold: 10,
+          lastRestockedAt: new Date(),
+        });
+
+        if (initialQty > 0) {
+          await StockInward.create({
+            bookCode: cleanBCode,
+            bookName: newBook.bookName,
+            quantity: initialQty,
+            supplier: 'Initial Excel Stock',
+            remarks: `Initial stock ${initialQty} copies for ${cleanBCode} from Product ${productCode}`,
+            source: 'EXCEL_UPLOAD',
+            enteredByUserId: new mongoose.Types.ObjectId(userId),
+          });
+        }
+
+        booksCreated++;
+        newBooksList.push(`${bTitle} (${cleanBCode})`);
+      }
+    }
+  }
+
+  await logAudit({
+    actorUserId: userId,
+    action: 'PRODUCTS_BULK_EXCEL_IMPORTED',
+    entityType: 'ProductCatalog',
+    entityId: 'BULK',
+    metadata: {
+      totalRows,
+      productsCreated,
+      productsExisting,
+      booksCreated,
+      booksUpdated,
+      booksPreserved,
+      errorsCount: errors.length,
+    },
+  });
+
+  return {
+    success: true,
+    totalRows,
+    productsCreated,
+    productsExisting,
+    booksCreated,
+    booksUpdated,
+    booksPreserved,
+    details: {
+      newProducts: newProductsList,
+      newBooks: newBooksList,
+      updatedBooks: updatedBooksList,
+    },
+    errors,
+    message: `Excel Upload Successful: ${productsCreated} new products created, ${productsExisting} existing checked. ${booksCreated} new books created, ${booksUpdated} books stock updated.`,
+  };
+}
+
+/**
+ * Generate and download a sample Excel template for Product upload
+ */
+export async function downloadProductTemplateExcel(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Products & Books Template');
+
+  // Title header banner
+  sheet.mergeCells('A1:E1');
+  const title = sheet.getCell('A1');
+  title.value = 'FAST DISPATCH PRO - Product & Book Barcodes Upload Template';
+  title.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } };
+  title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  title.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 28;
+
+  // Instructions row
+  sheet.mergeCells('A2:E2');
+  const note = sheet.getCell('A2');
+  note.value =
+    'NOTE: Product Code & Product Name are required. Agar Book Code pehle se hoga to duplicate nahi banega, sirf stock update hoga.';
+  note.font = { italic: true, size: 10, color: { argb: 'FF475569' } };
+  note.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+  sheet.getRow(2).height = 20;
+
+  // Columns header row (Row 3)
+  const headerRow = sheet.addRow([
+    'Product Code *',
+    'Product Name *',
+    'Book Code',
+    'Book Name',
+    'Stock Quantity (Optional)',
+  ]);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4338CA' } }; // Indigo
+  sheet.getRow(3).height = 24;
+
+  sheet.columns = [
+    { key: 'prdCode', width: 20 },
+    { key: 'prdName', width: 38 },
+    { key: 'bookCode', width: 22 },
+    { key: 'bookName', width: 34 },
+    { key: 'stock', width: 24 },
+  ];
+
+  // Sample data rows
+  const samples = [
+    {
+      prdCode: 'AFMEO-002',
+      prdName: 'CA Final AFM Exam Oriented Batch',
+      bookCode: 'AFON-002',
+      bookName: 'AFM Regular Concept Book Volume 1',
+      stock: 50,
+    },
+    {
+      prdCode: 'AFMEO-002',
+      prdName: 'CA Final AFM Exam Oriented Batch',
+      bookCode: 'AFOS1-002',
+      bookName: 'AFM Question Bank & MCQ',
+      stock: 40,
+    },
+    {
+      prdCode: 'ABFL-001',
+      prdName: 'Audit Full Book Set Regular',
+      bookCode: 'ACR-001',
+      bookName: 'Audit Regular Concept Book',
+      stock: 60,
+    },
+    {
+      prdCode: 'AEO-001',
+      prdName: 'CA Final Audit Exam Oriented Batch',
+      bookCode: 'AQB-001',
+      bookName: 'Audit Question Bank & Compiler',
+      stock: 35,
+    },
+  ];
+
+  samples.forEach((s) => {
+    sheet.addRow([s.prdCode, s.prdName, s.bookCode, s.bookName, s.stock]);
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+
