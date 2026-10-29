@@ -1829,9 +1829,27 @@ export async function bulkImportProductsExcel(userId: string, buffer: Buffer) {
 
   const headerMap = new Map<string, number>();
 
-  // Detect header row (Row 1)
-  worksheet.getRow(1).eachCell((cell, colNumber) => {
-    const val = (cell.text || cell.value?.toString() || '').trim().toLowerCase().replace(/[\s\-_]/g, '');
+  // Auto-detect header row — scan first 5 rows to find the row that contains
+  // recognizable column keywords (handles templates with title/note rows above headers)
+  const HEADER_KEYWORDS = ['productcode', 'product_code', 'prdcode', 'coursecode', 'code', 'bookcode', 'book_code', 'bookname', 'productname'];
+  let headerRowNumber = 1;
+
+  for (let r = 1; r <= 5; r++) {
+    const row = worksheet.getRow(r);
+    let matchCount = 0;
+    row.eachCell((cell) => {
+      const val = (cell.text || cell.value?.toString() || '').trim().toLowerCase().replace(/[\s\-_*]/g, '');
+      if (HEADER_KEYWORDS.some((kw) => val.includes(kw))) matchCount++;
+    });
+    if (matchCount >= 1) {
+      headerRowNumber = r;
+      break;
+    }
+  }
+
+  // Build header map from the detected header row
+  worksheet.getRow(headerRowNumber).eachCell((cell, colNumber) => {
+    const val = (cell.text || cell.value?.toString() || '').trim().toLowerCase().replace(/[\s\-_*]/g, '');
     headerMap.set(val, colNumber);
   });
 
@@ -1867,9 +1885,9 @@ export async function bulkImportProductsExcel(userId: string, buffer: Buffer) {
     rawQty: string;
   }> = [];
 
-  // Parse all rows
+  // Parse all rows (skip title/note/header rows above data)
   worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return; // Skip headers
+    if (rowNumber <= headerRowNumber) return; // Skip all rows up to and including header
 
     const rawProductCode = getColVal(
       row,
