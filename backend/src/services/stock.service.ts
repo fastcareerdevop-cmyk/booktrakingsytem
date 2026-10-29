@@ -5,6 +5,8 @@ import { StockInward } from '../models/StockInward';
 import { PendingBook } from '../models/PendingBook';
 import { ProductCatalog } from '../models/ProductCatalog';
 import { Order } from '../models/Order';
+import { DispatchLog } from '../models/DispatchLog';
+import { AuditLog } from '../models/AuditLog';
 import { logAudit } from '../utils/audit';
 
 export interface GetAvailableStockParams {
@@ -1526,3 +1528,282 @@ export async function receivePendingBook(userId: string, id: string, input: { re
       },
     };
   }
+
+/* =========================================================================
+   BOOK STOCK HISTORY & AUDIT LOGS (किताब का पूरा इतिहास)
+========================================================================= */
+
+/**
+ * Get detailed movement and transaction history for a specific book
+ */
+export async function getBookStockHistory(identifier: string) {
+  const cleanId = identifier.trim();
+  let book: any = null;
+
+  if (mongoose.Types.ObjectId.isValid(cleanId)) {
+    book = await BookStock.findById(cleanId).lean();
+  }
+  if (!book) {
+    const cleanCode = normalizeCode(cleanId);
+    book = await BookStock.findOne({ bookCode: cleanCode }).lean();
+  }
+
+  if (!book) {
+    throw { statusCode: 404, message: `Book "${identifier}" not found in stock master`, code: 'BOOK_NOT_FOUND' };
+  }
+
+  const bookCode = book.bookCode;
+
+  // 1. Fetch Inward entries & adjustments (StockInward)
+  const inwardRecords = await StockInward.find({ bookCode })
+    .populate('enteredByUserId', 'name email role')
+    .sort({ entryDate: -1, createdAt: -1 })
+    .lean();
+
+  // 2. Fetch Dispatch logs (DispatchLog)
+  const dispatchRecords = await DispatchLog.find({ verifiedBookCode: bookCode })
+    .populate('orderId', 'orderCode studentName mobileNumber trackingId courierName createdAt')
+    .populate('employeeId', 'name email role')
+    .sort({ dispatchedAt: -1, createdAt: -1 })
+    .lean();
+
+  // 3. Fetch Audit logs for this book (AuditLog)
+  const auditRecords = await AuditLog.find({
+    $or: [
+      { entityType: 'BookStock', entityId: book._id.toString() },
+      { 'metadata.bookCode': bookCode },
+    ],
+  })
+    .populate('actorUserId', 'name email role')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  // 4. Fetch Pending book entries (PendingBook)
+  const pendingRecords = await PendingBook.find({ bookCode })
+    .populate('addedByUserId', 'name email role')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  // Construct unified chronological timeline
+  const timeline: any[] = [];
+
+  // Add Inwards & Adjustments to timeline
+  for (const inv of inwardRecords) {
+    const user = (inv as any).enteredByUserId;
+    const isReduction = inv.quantity < 0;
+    const isAdjustment =
+      (inv.supplier && inv.supplier.includes('Adjustment')) ||
+      (inv.supplier && inv.supplier.includes('Reduction')) ||
+      (inv.supplier && inv.supplier.includes('समायोजन')) ||
+      (inv.supplier && inv.supplier.includes('कटौती'));
+
+    const eventDate = inv.entryDate || inv.createdAt;
+    timeline.push({
+      id: (inv as any)._id.toString(),
+      timestamp: eventDate,
+      dateFormatted: new Date(eventDate).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      timeFormatted: inv.entryTime || new Date(inv.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      type: isAdjustment ? (isReduction ? 'ADJUST_REDUCE' : 'ADJUST_ADD') : 'INWARD',
+      category: isReduction ? 'OUT' : 'IN',
+      quantityChange: inv.quantity,
+      party: inv.supplier || (isAdjustment ? 'Stock Adjustment' : 'Stock Inward'),
+      reference: inv.remarks || '-',
+      remarks: inv.remarks || '',
+      source: inv.source || 'MANUAL',
+      performedBy: user ? { id: user._id?.toString(), name: user.name, email: user.email } : { name: 'System / Admin' },
+    });
+  }
+
+  // Add Dispatches to timeline
+  for (const d of dispatchRecords) {
+    const emp = (d as any).employeeId;
+    const order = (d as any).orderId;
+    const eventDate = d.dispatchedAt || d.createdAt;
+    const qty = d.quantity || 1;
+
+    timeline.push({
+      id: (d as any)._id.toString(),
+      timestamp: eventDate,
+      dateFormatted: new Date(eventDate).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      timeFormatted: new Date(eventDate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+      type: 'DISPATCH',
+      category: 'OUT',
+      quantityChange: -qty,
+      party: order ? `${order.studentName || 'Student'} (${order.trackingId || order.orderCode || 'Order'})` : 'Order Outgoing',
+      reference: order ? `Tracking: ${order.trackingId || '-'} | Order: ${order.orderCode || '-'}` : (d.requestId || '-'),
+      remarks: order?.courierName ? `Courier: ${order.courierName}` : 'Physical Outgoing Scan',
+      source: (d as any).dispatchMode || 'BARCODE_SCAN',
+      performedBy: emp ? { id: emp._id?.toString(), name: emp.name, email: emp.email } : { name: 'Employee' },
+    });
+  }
+
+  // Sort timeline newest first
+  timeline.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  // Calculate statistics
+  let totalAddedInTimeline = 0;
+  let totalReducedInTimeline = 0;
+
+  for (const item of timeline) {
+    if (item.category === 'IN') {
+      totalAddedInTimeline += Math.abs(item.quantityChange);
+    } else if (item.category === 'OUT') {
+      totalReducedInTimeline += Math.abs(item.quantityChange);
+    }
+  }
+
+  const bookData = {
+    id: book._id.toString(),
+    bookCode: book.bookCode,
+    bookName: book.bookName,
+    productCode: book.productCode || '',
+    availableQuantity: book.availableQuantity,
+    totalInward: book.totalInward,
+    totalDispatched: book.totalDispatched,
+    lowStockThreshold: book.lowStockThreshold || 10,
+    status:
+      book.availableQuantity <= 0
+        ? 'OUT_OF_STOCK'
+        : book.availableQuantity <= (book.lowStockThreshold || 10)
+        ? 'LOW_STOCK'
+        : 'IN_STOCK',
+    lastRestockedAt: book.lastRestockedAt,
+    createdAt: book.createdAt,
+    updatedAt: book.updatedAt,
+  };
+
+  return {
+    book: bookData,
+    stats: {
+      currentAvailable: book.availableQuantity,
+      totalInward: book.totalInward,
+      totalDispatched: book.totalDispatched,
+      totalAddedInTimeline,
+      totalReducedInTimeline,
+      timelineEventsCount: timeline.length,
+      inwardTransactionsCount: inwardRecords.filter((r) => r.quantity > 0).length,
+      dispatchTransactionsCount: dispatchRecords.length,
+      adjustmentTransactionsCount: inwardRecords.filter(
+        (r) => r.supplier?.includes('Adjustment') || r.supplier?.includes('Reduction') || r.quantity < 0
+      ).length,
+      pendingOrdersCount: pendingRecords.length,
+    },
+    timeline,
+    pendingRecords: pendingRecords.map((p: any) => ({
+      id: p._id.toString(),
+      pendingQuantity: p.pendingQuantity,
+      receivedQuantity: p.receivedQuantity,
+      printerOrVendor: p.printerOrVendor,
+      expectedDate: p.expectedDate,
+      priority: p.priority,
+      status: p.status,
+      remarks: p.remarks,
+      createdAt: p.createdAt,
+      addedBy: p.addedByUserId ? { name: p.addedByUserId.name, email: p.addedByUserId.email } : null,
+    })),
+  };
+}
+
+/**
+ * Export a single book's complete history timeline to Excel
+ */
+export async function exportBookHistoryExcel(identifier: string): Promise<Buffer> {
+  const historyData = await getBookStockHistory(identifier);
+  const { book, stats, timeline } = historyData;
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet(`${book.bookCode} History`);
+
+  // Title & Metadata
+  sheet.mergeCells('A1:H1');
+  const titleCell = sheet.getCell('A1');
+  titleCell.value = `FAST DISPATCH PRO - Book Stock Movement History: ${book.bookName} (${book.bookCode})`;
+  titleCell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(1).height = 30;
+
+  // Book Summary row
+  sheet.addRow([
+    `Available Stock: ${book.availableQuantity} copies`,
+    `Total Inward: ${book.totalInward}`,
+    `Total Dispatched: ${book.totalDispatched}`,
+    `Status: ${book.status}`,
+    `Product Code: ${book.productCode || 'N/A'}`,
+    `Total Events: ${stats.timelineEventsCount}`,
+    `Report Generated: ${new Date().toLocaleString('en-IN')}`,
+    '',
+  ]);
+  sheet.getRow(2).font = { bold: true, size: 10, color: { argb: 'FF334155' } };
+  sheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+  sheet.addRow([]);
+
+  // Table Headers
+  const headerRow = sheet.addRow([
+    '#',
+    'Date',
+    'Time',
+    'Activity Type',
+    'Stock Change (Copies)',
+    'Source / Supplier / Student',
+    'Reference / Tracking / Order',
+    'Performed By',
+  ]);
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F766E' } };
+
+  sheet.columns = [
+    { key: 'idx', width: 6 },
+    { key: 'date', width: 14 },
+    { key: 'time', width: 12 },
+    { key: 'type', width: 18 },
+    { key: 'change', width: 22 },
+    { key: 'party', width: 32 },
+    { key: 'reference', width: 35 },
+    { key: 'by', width: 22 },
+  ];
+
+  timeline.forEach((item: any, idx: number) => {
+    const isPositive = item.quantityChange > 0;
+    const typeLabel =
+      item.type === 'INWARD'
+        ? 'Stock Inward (आवक)'
+        : item.type === 'DISPATCH'
+        ? 'Order Outgoing (जावक)'
+        : item.type === 'ADJUST_ADD'
+        ? 'Adjustment (+)'
+        : item.type === 'ADJUST_REDUCE'
+        ? 'Adjustment (-)'
+        : 'Update';
+
+    const row = sheet.addRow([
+      idx + 1,
+      item.dateFormatted,
+      item.timeFormatted,
+      typeLabel,
+      isPositive ? `+${item.quantityChange}` : `${item.quantityChange}`,
+      item.party,
+      item.reference,
+      item.performedBy?.name || 'System',
+    ]);
+
+    const changeCell = row.getCell(5);
+    if (isPositive) {
+      changeCell.font = { bold: true, color: { argb: 'FF059669' } };
+    } else {
+      changeCell.font = { bold: true, color: { argb: 'FFE11D48' } };
+    }
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+

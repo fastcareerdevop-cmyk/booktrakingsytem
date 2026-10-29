@@ -32,6 +32,8 @@ router.get('/export/available', requireRole('ADMIN', 'EMPLOYEE'), stockControlle
 router.get('/export/inward', requireRole('ADMIN', 'EMPLOYEE'), stockController.exportInwardExcel);
 router.delete('/book/:identifier', requireRole('ADMIN', 'EMPLOYEE'), stockController.deleteBookStock);
 router.put('/book/:identifier', requireRole('ADMIN', 'EMPLOYEE'), stockController.updateBookDetails);
+router.get('/book/:identifier/history', requireRole('ADMIN', 'EMPLOYEE'), stockController.getBookStockHistory);
+router.get('/book/:identifier/history/export', requireRole('ADMIN', 'EMPLOYEE'), stockController.exportBookHistoryExcel);
 router.delete('/clear-all', requireRole('ADMIN'), stockController.clearAllStock);
 router.get('/barcode-catalog', requireRole('ADMIN', 'EMPLOYEE'), stockController.getBarcodeCatalog);
 router.post('/barcode-catalog/book', requireRole('ADMIN'), stockController.addBookBarcode);

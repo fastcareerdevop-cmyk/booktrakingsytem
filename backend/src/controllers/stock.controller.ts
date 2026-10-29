@@ -254,3 +254,27 @@ export async function deleteProduct(req: AuthenticatedRequest, res: Response, ne
     next(error);
   }
 }
+
+export async function getBookStockHistory(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await stockService.getBookStockHistory(req.params.identifier);
+    return successResponse(res, 'Book stock history retrieved successfully', result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function exportBookHistoryExcel(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const buffer = await stockService.exportBookHistoryExcel(req.params.identifier);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=book-history-${req.params.identifier}-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+    return res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+}
+

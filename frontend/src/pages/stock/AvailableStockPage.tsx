@@ -25,7 +25,9 @@ import {
   Clock,
   Calendar,
   Trash2,
+  History,
 } from 'lucide-react';
+import { BookStockHistoryModal } from '../../components/stock/BookStockHistoryModal';
 
 export const AvailableStockPage: React.FC = () => {
   const { isAdmin } = useAuth();
@@ -76,6 +78,9 @@ export const AvailableStockPage: React.FC = () => {
   const [editAvailableQty, setEditAvailableQty] = useState<string>('0');
   const [editThreshold, setEditThreshold] = useState<string>('10');
   const [isUpdatingBook, setIsUpdatingBook] = useState<boolean>(false);
+
+  // Book Stock History Modal
+  const [historyModalBook, setHistoryModalBook] = useState<any>(null);
 
   const fetchStock = async (targetPage = 1) => {
     setIsLoading(true);
@@ -661,6 +666,14 @@ export const AvailableStockPage: React.FC = () => {
                           >
                             <Edit3 size={12} />
                             <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => setHistoryModalBook(b)}
+                            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded border border-blue-200 transition-colors cursor-pointer shadow-2xs"
+                            title="View complete history of this book (कब-कब कितनी आई, कितनी गई)"
+                          >
+                            <History size={13} />
+                            <span>History</span>
                           </button>
                           <button
                             onClick={() => openAdjustModal(b, 'SET')}
@@ -1296,6 +1309,14 @@ export const AvailableStockPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ─── Book Movement History Modal ────────────────────────────────────── */}
+      <BookStockHistoryModal
+        book={historyModalBook}
+        isOpen={!!historyModalBook}
+        onClose={() => setHistoryModalBook(null)}
+        onStockUpdated={() => fetchStock(page)}
+      />
     </div>
   );
 };
