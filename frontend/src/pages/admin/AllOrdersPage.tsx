@@ -25,12 +25,13 @@ export const AllOrdersPage: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const fetchOrders = async (page = 1) => {
+  const fetchOrders = async (page = 1, customLimit?: number) => {
     setIsLoading(true);
     try {
+      const currentLimit = customLimit || pagination.limit || 10;
       const params = new URLSearchParams();
       params.append('page', String(page));
-      params.append('limit', '10');
+      params.append('limit', String(currentLimit));
       if (search) params.append('search', search);
       if (status !== 'ALL') params.append('status', status);
       if (dateFilter) params.append('dateFilter', dateFilter);
@@ -230,7 +231,14 @@ export const AllOrdersPage: React.FC = () => {
               currentPage={pagination.page}
               totalPages={pagination.totalPages}
               totalRecords={pagination.total}
+              pageSize={pagination.limit}
               onPageChange={(p) => fetchOrders(p)}
+              onPageSizeChange={(newLimit) => {
+                setPagination(prev => ({ ...prev, limit: newLimit }));
+                fetchOrders(1, newLimit);
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              maxCustomLimit={100}
             />
           </div>
         )}

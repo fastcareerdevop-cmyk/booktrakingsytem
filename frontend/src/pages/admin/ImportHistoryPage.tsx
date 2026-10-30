@@ -18,10 +18,11 @@ export const ImportHistoryPage: React.FC = () => {
   // Selected batch for error details modal
   const [selectedBatch, setSelectedBatch] = useState<ImportBatch | null>(null);
 
-  const fetchBatches = async (page = 1) => {
+  const fetchBatches = async (page = 1, customLimit?: number) => {
     setIsLoading(true);
     try {
-      const res = await api.get(`/imports?page=${page}&limit=10`);
+      const currentLimit = customLimit || pagination.limit || 10;
+      const res = await api.get(`/imports?page=${page}&limit=${currentLimit}`);
       if (res.data.success) {
         setBatches(res.data.data.batches);
         setPagination(res.data.data.pagination);
@@ -110,7 +111,14 @@ export const ImportHistoryPage: React.FC = () => {
               currentPage={pagination.page}
               totalPages={pagination.totalPages}
               totalRecords={pagination.total}
+              pageSize={pagination.limit}
               onPageChange={(p) => fetchBatches(p)}
+              onPageSizeChange={(newLimit) => {
+                setPagination(prev => ({ ...prev, limit: newLimit }));
+                fetchBatches(1, newLimit);
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              maxCustomLimit={100}
             />
           </div>
         )}

@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
+import { Pagination } from '../../components/common/Pagination';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import {
   Boxes,
@@ -43,6 +44,7 @@ export const AvailableStockPage: React.FC = () => {
   const [limit, setLimit] = useState<number>(50);
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalRecords, setTotalRecords] = useState<number>(0);
   const [summary, setSummary] = useState<any>({
     totalTitles: 0,
     totalAvailableCopies: 0,
@@ -98,6 +100,7 @@ export const AvailableStockPage: React.FC = () => {
         setBooks(res.data.data.books || []);
         setSummary(res.data.data.summary || {});
         setTotalPages(res.data.data.pagination.totalPages || 1);
+        setTotalRecords(res.data.data.pagination.total || res.data.data.summary?.totalTitles || 0);
         setPage(targetPage);
       }
     } catch (err: any) {
@@ -718,32 +721,22 @@ export const AvailableStockPage: React.FC = () => {
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-slate-100 text-xs text-slate-500">
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex gap-1">
-              <Button
-                variant="secondary"
-                disabled={page <= 1}
-                onClick={() => fetchStock(page - 1)}
-                className="py-1 px-3 text-xs"
-              >
-                Previous
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={page >= totalPages}
-                onClick={() => fetchStock(page + 1)}
-                className="py-1 px-3 text-xs"
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* Customizable Pagination Bar */}
+        <div className="p-4 border-t border-slate-100">
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalRecords={totalRecords}
+            pageSize={limit}
+            onPageChange={(p) => fetchStock(p)}
+            onPageSizeChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            maxCustomLimit={100}
+          />
+        </div>
       </Card>
 
       {/* ─── Quick Restock Modal ──────────────────────────────────────────────── */}

@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
+import { Pagination } from '../../components/common/Pagination';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import {
   Clock,
@@ -32,8 +33,10 @@ export const PendingStockPage: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'RECEIVED'>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | 'NORMAL' | 'HIGH' | 'URGENT'>('ALL');
+  const [limit, setLimit] = useState<number>(25);
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalRecords, setTotalRecords] = useState<number>(0);
   const [summary, setSummary] = useState<any>({
     totalEntries: 0,
     totalPendingCopies: 0,
@@ -68,7 +71,7 @@ export const PendingStockPage: React.FC = () => {
     try {
       const params = new URLSearchParams();
       params.append('page', targetPage.toString());
-      params.append('limit', '25');
+      params.append('limit', limit.toString());
       if (search.trim()) params.append('search', search.trim());
       if (statusFilter !== 'ALL') params.append('status', statusFilter);
       if (priorityFilter !== 'ALL') params.append('priority', priorityFilter);
@@ -78,6 +81,7 @@ export const PendingStockPage: React.FC = () => {
         setItems(res.data.data.items || []);
         setSummary(res.data.data.summary || {});
         setTotalPages(res.data.data.pagination.totalPages || 1);
+        setTotalRecords(res.data.data.pagination.total || 0);
         setPage(targetPage);
       }
     } catch (err: any) {
@@ -90,7 +94,7 @@ export const PendingStockPage: React.FC = () => {
 
   useEffect(() => {
     fetchPendingBooks(1);
-  }, [statusFilter, priorityFilter]);
+  }, [statusFilter, priorityFilter, limit]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -505,32 +509,22 @@ export const PendingStockPage: React.FC = () => {
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between p-4 border-t border-slate-100 text-xs text-slate-500">
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex gap-1">
-              <Button
-                variant="secondary"
-                disabled={page <= 1}
-                onClick={() => fetchPendingBooks(page - 1)}
-                className="py-1 px-3 text-xs"
-              >
-                Previous
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={page >= totalPages}
-                onClick={() => fetchPendingBooks(page + 1)}
-                className="py-1 px-3 text-xs"
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* Customizable Pagination Bar */}
+        <div className="p-4 border-t border-slate-100">
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalRecords={totalRecords}
+            pageSize={limit}
+            onPageChange={(p) => fetchPendingBooks(p)}
+            onPageSizeChange={(newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            }}
+            pageSizeOptions={[10, 25, 50, 100]}
+            maxCustomLimit={100}
+          />
+        </div>
       </Card>
 
       {/* ─── Add / Edit Modal ─────────────────────────────────────────────────── */}

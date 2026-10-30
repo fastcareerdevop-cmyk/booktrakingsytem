@@ -21,12 +21,13 @@ export const DispatchHistoryPage: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const fetchLogs = async (page = 1) => {
+  const fetchLogs = async (page = 1, customLimit?: number) => {
     setIsLoading(true);
     try {
+      const currentLimit = customLimit || pagination.limit || 10;
       const params = new URLSearchParams();
       params.append('page', String(page));
-      params.append('limit', '10');
+      params.append('limit', String(currentLimit));
       if (bookCode) params.append('bookCode', bookCode);
       if (dateFilter) params.append('dateFilter', dateFilter);
       if (startDate) params.append('startDate', startDate);
@@ -168,7 +169,14 @@ export const DispatchHistoryPage: React.FC = () => {
               currentPage={pagination.page}
               totalPages={pagination.totalPages}
               totalRecords={pagination.total}
+              pageSize={pagination.limit}
               onPageChange={(p) => fetchLogs(p)}
+              onPageSizeChange={(newLimit) => {
+                setPagination(prev => ({ ...prev, limit: newLimit }));
+                fetchLogs(1, newLimit);
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              maxCustomLimit={100}
             />
           </div>
         )}

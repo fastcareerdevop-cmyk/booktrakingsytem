@@ -560,12 +560,13 @@ export const OutgoingOrdersPage: React.FC = () => {
     fetchBatches();
   }, []);
 
-  const fetchOutgoingOrders = async (page = 1) => {
+  const fetchOutgoingOrders = async (page = 1, customLimit?: number) => {
     setIsLoading(true);
     try {
+      const currentLimit = customLimit || pagination.limit || 10;
       const params = new URLSearchParams();
       params.append('page', String(page));
-      params.append('limit', '10');
+      params.append('limit', String(currentLimit));
       if (search) params.append('search', search);
       if (status !== 'ALL') params.append('status', status);
       if (batchId) params.append('batchId', batchId);
@@ -1483,7 +1484,14 @@ export const OutgoingOrdersPage: React.FC = () => {
               currentPage={pagination.page}
               totalPages={pagination.totalPages}
               totalRecords={pagination.total}
+              pageSize={pagination.limit}
               onPageChange={(p) => fetchOutgoingOrders(p)}
+              onPageSizeChange={(newLimit) => {
+                setPagination(prev => ({ ...prev, limit: newLimit }));
+                fetchOutgoingOrders(1, newLimit);
+              }}
+              pageSizeOptions={[10, 25, 50, 100]}
+              maxCustomLimit={100}
             />
           </div>
         )}
