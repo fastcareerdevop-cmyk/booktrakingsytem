@@ -110,6 +110,7 @@ export const OutgoingOrdersPage: React.FC = () => {
     itemsDispatched?: number;
   }>({ type: null, message: '' });
   const [isScanning, setIsScanning] = useState(false);
+  const isScanningRef = useRef(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const autoCloseTimerRef = useRef<any>(null);
 
@@ -168,7 +169,7 @@ export const OutgoingOrdersPage: React.FC = () => {
   }, [isDispatchBoxOpen]);
 
   const handleGlobalScan = useCallback(async (code: string) => {
-    if (!code.trim() || isScanning) return;
+    if (!code.trim() || isScanning || isScanningRef.current) return;
     const cleanCode = code.trim().toUpperCase();
 
     // Cancel any pending auto-close timers when a new scan starts
@@ -178,7 +179,9 @@ export const OutgoingOrdersPage: React.FC = () => {
     }
     setShowPaytmSuccess(false);
 
+    isScanningRef.current = true;
     setIsScanning(true);
+    setScannerCode('');
     setScanResult({ type: null, message: '' });
 
     try {
@@ -333,8 +336,9 @@ export const OutgoingOrdersPage: React.FC = () => {
       setScannerCode('');
       // Instantly refocus so employee never touches keyboard or mouse
       setTimeout(() => {
+        isScanningRef.current = false;
         scanInputRef.current?.focus();
-      }, 50);
+      }, 150);
     }
   }, [isScanning, soundEnabled, lastScannedOrder]);
 
@@ -494,7 +498,7 @@ export const OutgoingOrdersPage: React.FC = () => {
   // Auto-trigger verification as soon as number/code is entered (no Enter click required)
   useEffect(() => {
     const trimmed = scannerCode.trim().toUpperCase();
-    if (!trimmed || isScanning) return;
+    if (!trimmed || isScanning || isScanningRef.current) return;
 
     // 1. Instant trigger if complete Order Code format (ORD-YYMM-NNNNN, UNQ-YYMM-NNNNN, or 9-digit DDMMYYNNN)
     if (/^(ORD|UNQ)-\d{4}-\d{5}$/i.test(trimmed) || /^\d{9}$/.test(trimmed)) {

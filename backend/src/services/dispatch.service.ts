@@ -389,10 +389,25 @@ export async function dispatchByOrderCode(params: {
     const remaining = item.requiredQuantity - item.dispatchedQuantity;
     const cleanCode = normalizeBookCode(item.bookCode);
 
-    await Order.updateOne(
-      { _id: order._id, 'items._id': item._id },
-      { $set: { 'items.$.dispatchedQuantity': item.requiredQuantity } }
+    // Concurrency guard: Only update and decrement stock if item is still pending in DB!
+    const updatedOrderDoc = await Order.findOneAndUpdate(
+      {
+        _id: order._id,
+        items: {
+          $elemMatch: {
+            _id: item._id,
+            dispatchedQuantity: { $lt: item.requiredQuantity },
+          },
+        },
+      },
+      { $set: { 'items.$.dispatchedQuantity': item.requiredQuantity } },
+      { new: true }
     );
+
+    // If item was already updated by another concurrent request, skip to avoid double decrement!
+    if (!updatedOrderDoc) {
+      continue;
+    }
 
     await BookStock.findOneAndUpdate(
       { bookCode: cleanCode },
@@ -570,10 +585,25 @@ export async function dispatchByProductCode(params: {
     const remaining = item.requiredQuantity - item.dispatchedQuantity;
     const cleanCode = normalizeBookCode(item.bookCode);
 
-    await Order.updateOne(
-      { _id: order._id, 'items._id': item._id },
-      { $set: { 'items.$.dispatchedQuantity': item.requiredQuantity } }
+    // Concurrency guard: Only update and decrement stock if item is still pending in DB!
+    const updatedOrderDoc = await Order.findOneAndUpdate(
+      {
+        _id: order._id,
+        items: {
+          $elemMatch: {
+            _id: item._id,
+            dispatchedQuantity: { $lt: item.requiredQuantity },
+          },
+        },
+      },
+      { $set: { 'items.$.dispatchedQuantity': item.requiredQuantity } },
+      { new: true }
     );
+
+    // If item was already updated by another concurrent request, skip to avoid double decrement!
+    if (!updatedOrderDoc) {
+      continue;
+    }
 
     await BookStock.findOneAndUpdate(
       { bookCode: cleanCode },

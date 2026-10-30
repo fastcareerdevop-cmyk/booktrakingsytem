@@ -51,8 +51,9 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   // Paytm-style Circular Checkmark ("RIGHT KA CLICK") state & countdown
   const [showPaytmSuccess, setShowPaytmSuccess] = useState(false);
   const [successCountdown, setSuccessCountdown] = useState(15);
-  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoCloseTimerRef = useRef<any>(null);
+  const countdownIntervalRef = useRef<any>(null);
+  const isVerifyingRef = useRef(false);
 
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'warning' | 'completed' | null;
@@ -151,7 +152,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     if (e) e.preventDefault();
     const code = enteredCode.trim().toUpperCase();
 
-    if (!code || isVerifying || isOrderFullyCompleted) {
+    if (!code || isVerifying || isVerifyingRef.current || isOrderFullyCompleted) {
       if (isOrderFullyCompleted && code) {
         setFeedback({
           type: 'warning',
@@ -165,7 +166,9 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       return;
     }
 
+    isVerifyingRef.current = true;
     setIsVerifying(true);
+    setEnteredCode('');
     setFeedback({ type: null, message: '' });
 
     const idempotencyKey = `req-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -306,6 +309,10 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       }, 50);
     } finally {
       setIsVerifying(false);
+      setTimeout(() => {
+        isVerifyingRef.current = false;
+        inputRef.current?.focus();
+      }, 150);
     }
   };
 
