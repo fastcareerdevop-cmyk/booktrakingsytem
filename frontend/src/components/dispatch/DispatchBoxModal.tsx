@@ -390,8 +390,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
           {/* ─── 2-COLUMN HORIZONTAL ("AADA") LAYOUT (Active on Tablets, Laptops & Desktops) ─── */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4.5 items-start">
             
-            {/* ─── LEFT HALF: ORDER/COURSE & STUDENT DETAILS & STATS ─── */}
-            <div className="space-y-4">
+            {/* ─── LEFT HALF: COURSE, STUDENT DETAILS & SCANNER INPUT ─── */}
+            <div className="space-y-3.5">
               {/* 1. HIGHLIGHTED: COURSE / ORDER ITEM */}
               <div className="p-3.5 rounded-2xl bg-[#DE3744] text-white shadow-xl border-2 border-[#ff838c]/40 ring-2 ring-[#DE3744]/30">
                 {/* Big Font Highlighted Item Name */}
@@ -521,33 +521,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                 </div>
               </div>
 
-              {/* 3. Live Scanned Activity for this session */}
-              {scanHistory.length > 0 && (
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 text-[11px]">
-                  <div className="flex items-center justify-between text-slate-500 font-medium mb-1.5">
-                    <span className="flex items-center gap-1">
-                      <History className="w-3.5 h-3.5 text-slate-400" /> Recent Scans in this Box
-                    </span>
-                    <span>{scanHistory.length} scan{scanHistory.length > 1 ? 's' : ''}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-                    {scanHistory.map((h) => (
-                      <span
-                        key={h.id}
-                        className="bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 font-mono text-[10px]"
-                      >
-                        ✓ {h.code} <span className="text-slate-400">({h.timestamp})</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* ─── RIGHT HALF: BARCODE SCANNER INPUT & BOOKS CHECKLIST ─── */}
-            <div className="space-y-4">
-              {/* 1. Scan / Input Box Section */}
-              <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 shadow-inner">
+              {/* 3. SCAN / INPUT BOX SECTION (Shifted Under Student Details Card) */}
+              <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-3.5 shadow-inner">
                 <form onSubmit={handleScanOrSubmit} className="space-y-2.5">
                   <div className="flex items-center justify-between">
                     <label
@@ -578,7 +553,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                       }
                       disabled={isVerifying || isOrderFullyCompleted}
                       autoFocus
-                      className={`w-full pl-4 pr-24 py-3 rounded-xl font-mono font-bold text-base uppercase tracking-wide transition-all ${
+                      className={`w-full pl-4 pr-24 py-2.5 rounded-xl font-mono font-bold text-sm sm:text-base uppercase tracking-wide transition-all ${
                         isOrderFullyCompleted
                           ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                           : 'bg-white border-2 border-red-500/70 text-slate-900 shadow-sm focus:outline-none focus:ring-4 focus:ring-red-100 focus:border-red-600'
@@ -606,7 +581,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
 
                 {/* Quick-fill chips for pending products & books */}
                 {!isOrderFullyCompleted && (
-                  <div className="mt-3 pt-3 border-t border-slate-200/80 space-y-2 text-xs">
+                  <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 space-y-2 text-xs">
                     {/* Product Code chips if order contains multiple products */}
                     {(() => {
                       const pendingProducts = Array.from(
@@ -660,7 +635,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
 
                 {/* Feedback Banners */}
                 {feedback.type === 'completed' && (
-                  <div className="mt-3 p-3 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 text-xs flex items-center gap-2.5 animate-pulse">
+                  <div className="mt-2.5 p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-900 text-xs flex items-center gap-2.5 animate-pulse">
                     <Sparkles className="w-5 h-5 text-emerald-600 shrink-0" />
                     <div>
                       <p className="font-bold text-xs sm:text-sm">{feedback.message}</p>
@@ -672,28 +647,55 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                 )}
 
                 {feedback.type === 'success' && (
-                  <div className="mt-3 p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2">
+                  <div className="mt-2.5 p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                     <div className="font-medium">{feedback.message}</div>
                   </div>
                 )}
 
                 {feedback.type === 'warning' && (
-                  <div className="mt-3 p-2.5 rounded-xl border border-rose-300 bg-rose-50 text-rose-800 text-xs flex items-center gap-2">
+                  <div className="mt-2.5 p-2.5 rounded-xl border border-rose-300 bg-rose-50 text-rose-800 text-xs flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                     <div className="font-medium">{feedback.message}</div>
                   </div>
                 )}
               </div>
 
-              {/* 2. Books Checklist for this student */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-slate-600 px-1 font-semibold">
-                  <span>Books In This Order ({activeOrder.items.length} titles)</span>
-                  <span>Quantity Breakdown</span>
+              {/* 4. Live Scanned Activity for this session */}
+              {scanHistory.length > 0 && (
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 text-[11px]">
+                  <div className="flex items-center justify-between text-slate-500 font-medium mb-1.5">
+                    <span className="flex items-center gap-1">
+                      <History className="w-3.5 h-3.5 text-slate-400" /> Recent Scans in this Box
+                    </span>
+                    <span>{scanHistory.length} scan{scanHistory.length > 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                    {scanHistory.map((h) => (
+                      <span
+                        key={h.id}
+                        className="bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 font-mono text-[10px]"
+                      >
+                        ✓ {h.code} <span className="text-slate-400">({h.timestamp})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ─── RIGHT HALF: BOOKS CHECKLIST FOR THIS STUDENT ─── */}
+            <div className="space-y-3">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-sm">
+                <div className="flex items-center justify-between text-xs text-slate-700 pb-2.5 mb-2.5 border-b border-slate-100 font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <PackageCheck className="w-4 h-4 text-[#DE3744]" />
+                    Books In This Order ({activeOrder.items.length} titles)
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-medium">Quantity Breakdown</span>
                 </div>
 
-                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
                   {activeOrder.items.map((item) => {
                     const isDone = item.pendingQuantity === 0;
                     const isJustScanned = lastDispatchedItemId === item.id;
@@ -701,7 +703,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                     return (
                       <div
                         key={item.id}
-                        className={`p-2.5 rounded-xl border text-xs flex items-center justify-between transition-all ${
+                        className={`p-3 rounded-xl border text-xs flex items-center justify-between transition-all ${
                           isJustScanned
                             ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-300 shadow-sm'
                             : isDone
