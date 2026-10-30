@@ -52,8 +52,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   // Paytm-style Circular Checkmark ("RIGHT KA CLICK") state & countdown
   const [showPaytmSuccess, setShowPaytmSuccess] = useState(false);
   const [successCountdown, setSuccessCountdown] = useState(15);
-  const autoCloseTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'warning' | 'completed' | null;
