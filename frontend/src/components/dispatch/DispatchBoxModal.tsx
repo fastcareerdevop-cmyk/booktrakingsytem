@@ -388,8 +388,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         maxWidth="6xl"
       >
         <div className="space-y-4">
-          {/* ─── 2-COLUMN HORIZONTAL ("AADA") LAYOUT ─── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+          {/* ─── 2-COLUMN HORIZONTAL ("AADA") LAYOUT (Active on Tablets, Laptops & Desktops) ─── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4.5 items-start">
             
             {/* ─── LEFT HALF: ORDER/COURSE & STUDENT DETAILS & STATS ─── */}
             <div className="space-y-4">

@@ -7,7 +7,8 @@ interface ModalProps {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl' | '5xl' | '6xl';
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '4xl' | '5xl' | '6xl' | 'full';
+  className?: string;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -17,6 +18,7 @@ export const Modal: React.FC<ModalProps> = ({
   subtitle,
   children,
   maxWidth = 'md',
+  className = '',
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -30,7 +32,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   if (!isOpen) return null;
 
-  const maxWidthStyles = {
+  const maxWidthStyles: Record<string, string> = {
     sm: 'max-w-sm',
     md: 'max-w-md',
     lg: 'max-w-lg',
@@ -38,28 +40,29 @@ export const Modal: React.FC<ModalProps> = ({
     '2xl': 'max-w-2xl',
     '4xl': 'max-w-4xl',
     '5xl': 'max-w-5xl',
-    '6xl': 'max-w-6xl',
+    '6xl': 'max-w-6xl w-[96vw]',
+    'full': 'max-w-[96vw] w-[96vw]',
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
       <div
-        className={`bg-white rounded-2xl shadow-xl border border-slate-200/80 w-full ${maxWidthStyles[maxWidth]} transform transition-all overflow-hidden`}
+        className={`bg-white rounded-2xl shadow-2xl border border-slate-200/80 w-full ${maxWidthStyles[maxWidth] || 'max-w-md'} transform transition-all overflow-hidden ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-slate-800 text-lg">{title}</h3>
+            <h3 className="font-semibold text-slate-800 text-base sm:text-lg">{title}</h3>
             {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-100 transition-colors"
+            className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-4 sm:p-5 max-h-[85vh] overflow-y-auto">{children}</div>
       </div>
     </div>
   );
