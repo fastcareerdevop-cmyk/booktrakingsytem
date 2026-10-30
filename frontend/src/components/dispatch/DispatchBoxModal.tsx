@@ -13,7 +13,6 @@ import {
   User,
   Phone,
   Hash,
-  FileSpreadsheet,
   ArrowRight,
   Volume2,
   VolumeX,
@@ -394,19 +393,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
             {/* ─── LEFT HALF: ORDER/COURSE & STUDENT DETAILS & STATS ─── */}
             <div className="space-y-4">
               {/* 1. HIGHLIGHTED: COURSE / ORDER ITEM */}
-              <div className="p-4 rounded-2xl bg-[#DE3744] text-white shadow-xl border-2 border-[#ff838c]/40 ring-2 ring-[#DE3744]/30">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/20 pb-2 mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-white animate-pulse" />
-                    <span className="text-xs font-black uppercase tracking-widest text-white/90">
-                      ORDER ITEM / COURSE
-                    </span>
-                  </div>
-                  <span className="text-xs font-bold bg-white text-[#DE3744] px-3 py-1 rounded-full shadow-xs">
-                    {activeOrder.items?.length || 0} {(activeOrder.items?.length || 0) === 1 ? 'Book' : 'Books'} in Package
-                  </span>
-                </div>
-
+              <div className="p-3.5 rounded-2xl bg-[#DE3744] text-white shadow-xl border-2 border-[#ff838c]/40 ring-2 ring-[#DE3744]/30">
                 {/* Big Font Highlighted Item Name */}
                 <div className="space-y-2">
                   {(() => {
@@ -442,8 +429,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
               </div>
 
               {/* 2. Top Order Information Header & Counters */}
-              <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-4 shadow-md border border-slate-700/60">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-700/80">
+              <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-3.5 shadow-md border border-slate-700/60">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b border-slate-700/80">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-xs font-bold bg-red-500/20 text-red-300 px-2 py-0.5 rounded border border-red-400/30">
@@ -458,12 +445,6 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                         <Phone className="w-3.5 h-3.5 text-slate-400" />
                         <strong className="font-mono">{activeOrder.mobileNumber}</strong>
                       </span>
-                      {activeOrder.importBatch?.originalFileName && (
-                        <span className="flex items-center gap-1 text-emerald-300 font-mono text-[11px] bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-700/40">
-                          <FileSpreadsheet className="w-3.5 h-3.5" />
-                          {activeOrder.importBatch.originalFileName}
-                        </span>
-                      )}
                     </div>
                   </div>
 
@@ -486,36 +467,36 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                   </div>
                 </div>
 
-                {/* Real-time Order Quantities Bar */}
-                <div className="grid grid-cols-3 gap-2 pt-3 text-center">
-                  <div className="bg-slate-800/80 rounded-xl p-2 border border-slate-700/50">
-                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                {/* Real-time Order Quantities Bar - Compact Size */}
+                <div className="grid grid-cols-3 gap-1.5 pt-2 text-center">
+                  <div className="bg-slate-800/80 rounded-lg py-1.5 px-2 border border-slate-700/50">
+                    <span className="text-[9px] text-slate-400 uppercase font-semibold tracking-wider block">
                       Total Required
                     </span>
-                    <div className="text-lg font-bold font-mono text-white mt-0.5">
+                    <div className="text-sm sm:text-base font-bold font-mono text-white mt-0.5">
                       {totalRequired}
                     </div>
                   </div>
 
-                  <div className="bg-emerald-950/30 rounded-xl p-2 border border-emerald-800/40">
-                    <span className="text-[10px] text-emerald-400 uppercase font-bold tracking-wider">
+                  <div className="bg-emerald-950/30 rounded-lg py-1.5 px-2 border border-emerald-800/40">
+                    <span className="text-[9px] text-emerald-400 uppercase font-semibold tracking-wider block">
                       Dispatched
                     </span>
-                    <div className="text-lg font-bold font-mono text-emerald-400 mt-0.5 flex items-center justify-center gap-1">
+                    <div className="text-sm sm:text-base font-bold font-mono text-emerald-400 mt-0.5 flex items-center justify-center gap-1">
                       <span>{totalDispatched}</span>
                       {totalDispatched > 0 && <span className="text-xs">✓</span>}
                     </div>
                   </div>
 
-                  <div className={`rounded-xl p-2 border ${
+                  <div className={`rounded-lg py-1.5 px-2 border ${
                     totalPending === 0
                       ? 'bg-emerald-900/40 border-emerald-600/50'
                       : 'bg-amber-950/30 border-amber-800/40'
                   }`}>
-                    <span className="text-[10px] text-amber-400 uppercase font-bold tracking-wider">
+                    <span className="text-[9px] text-amber-400 uppercase font-semibold tracking-wider block">
                       Remaining
                     </span>
-                    <div className="text-lg font-bold font-mono text-amber-400 mt-0.5">
+                    <div className="text-sm sm:text-base font-bold font-mono text-amber-400 mt-0.5">
                       {totalPending}
                     </div>
                   </div>
