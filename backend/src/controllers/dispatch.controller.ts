@@ -135,10 +135,10 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
       const totalPending = Math.max(0, totalRequired - totalDispatched);
 
       // Duplicate scan prevention: If order is already completed, throw error!
-      if (totalPending === 0) {
+      if (totalPending === 0 || computeOrderStatus(matchedByOrderCode.items) === 'COMPLETED') {
         return errorResponse(
           res,
-          `❌ Order "${scannedCode}" has ALREADY been fully dispatched! Cannot scan again.`,
+          `❌ Order "${matchedByOrderCode.trackingId || matchedByOrderCode.orderCode}" (${matchedByOrderCode.studentName}) pehle se hi fully dispatch ho chuka hai! Ise dubara scan nahi kiya ja sakta.`,
           'ORDER_ALREADY_COMPLETED',
           400
         );
@@ -181,8 +181,13 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
           (acc: number, i: any) => acc + Math.max(0, i.requiredQuantity - i.dispatchedQuantity),
           0
         );
-        if (orderRemaining === 0) {
-          return errorResponse(res, `Order "${activeOrder.orderCode}" is already fully dispatched!`, 'ORDER_ALREADY_COMPLETED', 400);
+        if (orderRemaining === 0 || computeOrderStatus(activeOrder.items) === 'COMPLETED') {
+          return errorResponse(
+            res,
+            `❌ Order "${activeOrder.trackingId || activeOrder.orderCode}" (${activeOrder.studentName}) pehle se hi fully dispatch ho chuka hai! Ise dubara scan nahi kiya ja sakta.`,
+            'ORDER_ALREADY_COMPLETED',
+            400
+          );
         }
 
         // A. Check if scannedCode matches this active order's product code
@@ -258,42 +263,14 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
       }
     }
 
-    // 3. Fallback when no order is loaded on screen:
-    // Try matching product code across active orders
-    const matchedByProduct = await Order.findOne({
-      $or: [{ productCode: scannedCode }, { 'items.productCode': scannedCode }],
-    });
-
-    if (matchedByProduct) {
-      const result = await dispatchService.dispatchByProductCode({
-        productCode: scannedCode,
-        orderId,
-        employeeId: req.user.id,
-        requestId,
-      });
-      const notification = await notifyOrderWhenFullyDispatched(
-        result.order?.id || matchedByProduct._id.toString(),
-        req.user.id,
-        result.order?.totalPending ?? 0
-      );
-      return successResponse(res, result.message, { ...result, notification });
-    }
-
-    // Try matching book code across active orders
-    const result = await dispatchService.verifyAndDispatchBook({
-      orderItemId,
-      orderId,
-      enteredBookCode: scannedCode,
-      employeeId: req.user.id,
-      requestId,
-    });
-    const notification = await notifyOrderWhenFullyDispatched(
-      result.order?.id || orderId || result.orderItem?.id,
-      req.user.id,
-      result.order?.totalPending ?? 0
+    // 3. STRICT RULE: Student Barcode MUST be scanned before any Product or Book Barcode!
+    // If no student order is loaded on screen, scanning a product or book code is strictly prohibited.
+    return errorResponse(
+      res,
+      `⚠️ Pehle Student Barcode scan karein! Student barcode scan hone ke baad hi uske products scan ho sakte hain. (Aapne scan kiya: "${scannedCode}")`,
+      'STUDENT_SCAN_REQUIRED_FIRST',
+      400
     );
-
-    return successResponse(res, result.message, { ...result, scanType: 'BOOK_CODE', notification });
   } catch (error) {
     next(error);
   }

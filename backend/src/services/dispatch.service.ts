@@ -88,26 +88,24 @@ export async function verifyAndDispatchBook(params: {
       throw { statusCode: 404, message: 'Order not found', code: 'ORDER_NOT_FOUND' };
     }
   } else {
-    // Global Book Scan: Find first active order that has this book code pending
-    const candidates = await Order.find({
-      'items.bookCode': normalizedEnteredCode,
-    }).sort({ createdAt: 1 });
+    throw {
+      statusCode: 400,
+      message: `Pehle Student Barcode scan karein! Student barcode scan hone ke baad hi Book Code "${enteredBookCode}" scan ho sakta hai.`,
+      code: 'STUDENT_SCAN_REQUIRED_FIRST',
+    };
+  }
 
-    order = candidates.find((o: any) =>
-      o.items.some(
-        (i: any) =>
-          normalizeBookCode(i.bookCode) === normalizedEnteredCode &&
-          i.dispatchedQuantity < i.requiredQuantity
-      )
-    );
-
-    if (!order) {
-      throw {
-        statusCode: 404,
-        message: `No active order found with pending copies for Book Code "${enteredBookCode}".`,
-        code: 'BOOK_NOT_FOUND_OR_DISPATCHED',
-      };
-    }
+  // Duplicate scan check on order level
+  const totalPendingInOrder = order.items.reduce(
+    (acc: number, i: any) => acc + Math.max(0, i.requiredQuantity - i.dispatchedQuantity),
+    0
+  );
+  if (totalPendingInOrder === 0 || computeOrderStatus(order.items) === 'COMPLETED') {
+    throw {
+      statusCode: 400,
+      message: `❌ Order "${order.trackingId || order.orderCode}" (${order.studentName}) pehle se hi fully dispatch ho chuka hai! Ise dubara scan nahi kiya ja sakta.`,
+      code: 'ORDER_ALREADY_COMPLETED',
+    };
   }
 
   // Match item in order
@@ -363,37 +361,11 @@ export async function dispatchByOrderCode(params: {
   const totalRequired = order.items.reduce((acc: number, i: any) => acc + i.requiredQuantity, 0);
   const totalDispatched = order.items.reduce((acc: number, i: any) => acc + i.dispatchedQuantity, 0);
 
-  if (pendingItems.length === 0) {
-    return {
-      success: true,
-      alreadyProcessed: true,
-      scanType: 'ORDER_CODE',
-      orderCode: normalizedOrderCode,
-      message: `Order "${normalizedOrderCode}" is already fully dispatched!`,
-      order: {
-        id: order._id.toString(),
-        orderCode: order.orderCode,
-        productCode: order.productCode,
-        studentName: order.studentName,
-        trackingId: order.trackingId,
-        mobileNumber: order.mobileNumber,
-        totalRequired,
-        totalDispatched,
-        totalPending: 0,
-        status: 'COMPLETED',
-        items: order.items.map((i: any) => ({
-          id: i._id.toString(),
-          productCode: i.productCode,
-          productName: i.productName,
-          bookCode: i.bookCode,
-          bookName: i.bookName,
-          requiredQuantity: i.requiredQuantity,
-          dispatchedQuantity: i.dispatchedQuantity,
-          pendingQuantity: 0,
-          status: 'COMPLETED',
-        })),
-      },
-      itemsDispatched: 0,
+  if (pendingItems.length === 0 || computeOrderStatus(order.items) === 'COMPLETED') {
+    throw {
+      statusCode: 400,
+      message: `❌ Order "${order.trackingId || order.orderCode}" (${order.studentName}) pehle se hi fully dispatch ho chuka hai! Ise dubara scan nahi kiya ja sakta.`,
+      code: 'ORDER_ALREADY_COMPLETED',
     };
   }
 
@@ -513,24 +485,32 @@ export async function dispatchByProductCode(params: {
   const normalizedProductCode = productCode.trim().toUpperCase();
 
   // Find order
-  let order: any;
-  if (orderId) {
-    order = await Order.findById(orderId);
-  } else {
-    const candidates = await Order.find({
-      $or: [
-        { productCode: normalizedProductCode },
-        { 'items.productCode': normalizedProductCode },
-      ],
-    });
-    order = candidates.find((o: any) => o.items.some((i: any) => i.dispatchedQuantity < i.requiredQuantity));
+  if (!orderId) {
+    throw {
+      statusCode: 400,
+      message: `Pehle Student Barcode scan karein! Student barcode scan hone ke baad hi Product Code "${normalizedProductCode}" scan ho sakta hai.`,
+      code: 'STUDENT_SCAN_REQUIRED_FIRST',
+    };
   }
 
+  const order = await Order.findById(orderId);
   if (!order) {
     throw {
       statusCode: 404,
-      message: `No active order found with pending books for Product Code "${normalizedProductCode}".`,
-      code: 'PRODUCT_CODE_NOT_FOUND',
+      message: `No active order found with ID "${orderId}".`,
+      code: 'ORDER_NOT_FOUND',
+    };
+  }
+
+  const orderRemaining = order.items.reduce(
+    (acc: number, i: any) => acc + Math.max(0, i.requiredQuantity - i.dispatchedQuantity),
+    0
+  );
+  if (orderRemaining === 0 || computeOrderStatus(order.items) === 'COMPLETED') {
+    throw {
+      statusCode: 400,
+      message: `❌ Order "${order.trackingId || order.orderCode}" (${order.studentName}) pehle se hi fully dispatch ho chuka hai! Ise dubara scan nahi kiya ja sakta.`,
+      code: 'ORDER_ALREADY_COMPLETED',
     };
   }
 

@@ -143,7 +143,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   const totalRequired = activeOrder.totalRequired;
   const totalDispatched = activeOrder.totalDispatched;
   const totalPending = activeOrder.totalPending;
-  const isOrderFullyCompleted = totalPending === 0;
+  const isOrderFullyCompleted = totalPending === 0 || activeOrder.status === 'COMPLETED';
   const completionPercentage =
     totalRequired > 0 ? Math.round((totalDispatched / totalRequired) * 100) : 0;
 
@@ -151,7 +151,19 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     if (e) e.preventDefault();
     const code = enteredCode.trim().toUpperCase();
 
-    if (!code || isVerifying || isOrderFullyCompleted) return;
+    if (!code || isVerifying || isOrderFullyCompleted) {
+      if (isOrderFullyCompleted && code) {
+        setFeedback({
+          type: 'warning',
+          message: '❌ Yeh order pehle se hi fully dispatch ho chuka hai! Dobara scan nahi hoga aur books kam nahi hongi.',
+        });
+        if (soundEnabled) {
+          playErrorTone();
+          speakErrorMessage('This order is already fully dispatched. Duplicate scan not allowed.');
+        }
+      }
+      return;
+    }
 
     setIsVerifying(true);
     setFeedback({ type: null, message: '' });
