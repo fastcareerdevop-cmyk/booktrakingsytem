@@ -313,8 +313,8 @@ export const BarcodeSheetPage: React.FC = () => {
                 </div>
                 <div class="student">
                   <div class="student-heading">
-                    <h2>${escapeHtml(order.studentName)}</h2>
-                    <span class="serial">#${index + 1}</span>
+                    <h2 class="name-large"><span class="serial-inline">#${index + 1}</span> ${escapeHtml(order.studentName)}</h2>
+
                   </div>
                   <p>Tracking ID: <strong>${escapeHtml(order.trackingId || '-')}</strong></p>
                   <p>Student Code: <strong>${escapeHtml(order.orderCode || '-')}</strong></p>

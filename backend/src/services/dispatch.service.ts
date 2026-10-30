@@ -534,17 +534,39 @@ export async function dispatchByProductCode(params: {
     };
   }
 
-  const isMatchingOrderLevel = order.productCode && order.productCode.toUpperCase() === normalizedProductCode;
-  const matchingItems = order.items.filter((i: any) =>
-    (isMatchingOrderLevel || (i.productCode && i.productCode.toUpperCase() === normalizedProductCode)) &&
+  // 1. Check if any items have explicit item-level productCode matching normalizedProductCode
+  let matchingItems = order.items.filter((i: any) =>
+    i.productCode && i.productCode.trim().toUpperCase() === normalizedProductCode &&
     i.dispatchedQuantity < i.requiredQuantity
   );
 
+  // 2. Fallback: Only if NO item in this order has an explicit productCode, check if order.productCode matches
   if (matchingItems.length === 0) {
+    const hasAnyItemProductCode = order.items.some((i: any) => i.productCode && i.productCode.trim());
+    if (!hasAnyItemProductCode && order.productCode && order.productCode.trim().toUpperCase() === normalizedProductCode) {
+      matchingItems = order.items.filter((i: any) => i.dispatchedQuantity < i.requiredQuantity);
+    }
+  }
+
+  if (matchingItems.length === 0) {
+    // Check if this product was already dispatched for this order
+    const alreadyDispatchedForThisProduct = order.items.filter((i: any) =>
+      (i.productCode && i.productCode.trim().toUpperCase() === normalizedProductCode) ||
+      (!i.productCode && order.productCode && order.productCode.trim().toUpperCase() === normalizedProductCode)
+    );
+
+    if (alreadyDispatchedForThisProduct.length > 0) {
+      throw {
+        statusCode: 400,
+        message: `Product Code "${normalizedProductCode}" has ALREADY been verified & dispatched for ${order.studentName}! Double scan prevented.`,
+        code: 'PRODUCT_ALREADY_DISPATCHED',
+      };
+    }
+
     throw {
       statusCode: 400,
-      message: `All books for Product Code "${normalizedProductCode}" in order for ${order.studentName} have already been dispatched.`,
-      code: 'PRODUCT_FULLY_DISPATCHED',
+      message: `No pending items found for Product Code "${normalizedProductCode}" in order for ${order.studentName}.`,
+      code: 'PRODUCT_NO_PENDING_ITEMS',
     };
   }
 
@@ -638,8 +660,11 @@ export async function dispatchByProductCode(params: {
     success: true,
     scanType: 'PRODUCT_CODE',
     productCode: normalizedProductCode,
+    itemsDispatched: matchingItems.length,
     message: [
-      `Product Code "${normalizedProductCode}" verified! ${matchingItems.length} book(s) dispatched for ${order.studentName}.`,
+      totalPending === 0
+        ? `Product Code "${normalizedProductCode}" verified! All books dispatched for ${order.studentName}. Order Complete!`
+        : `Product Code "${normalizedProductCode}" verified (${matchingItems.length} book(s) dispatched). ${totalPending} item(s) still pending for ${order.studentName}. Please scan remaining product code(s).`,
       stockWarning,
     ]
       .filter(Boolean)
@@ -668,7 +693,7 @@ export async function dispatchByProductCode(params: {
         status: computeItemStatus(i.requiredQuantity, i.dispatchedQuantity),
       })),
     },
-    itemsDispatched: matchingItems.length,
+    orderStatus,
   };
 }
 

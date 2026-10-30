@@ -202,10 +202,15 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
             req.user.id,
             result.order?.totalPending ?? 0
           );
+          const isFullyDone = (result.order?.totalPending ?? 0) === 0;
+          const msg = isFullyDone
+            ? `Product Code "${scannedCode}" Scanned & Verified! All products & books verified & dispatched for ${activeOrder.studentName}. Order Complete!`
+            : `Product Code "${scannedCode}" Scanned & Verified (${result.itemsDispatched || 1} book(s) dispatched). ${result.order?.totalPending} item(s) still pending for ${activeOrder.studentName}. Please scan remaining product code(s).`;
+
           return successResponse(
             res,
-            `Product Code "${scannedCode}" Scanned & Verified! All combo books verified & dispatched for ${activeOrder.studentName}.`,
-            { ...result, notification }
+            msg,
+            { ...result, message: msg, notification }
           );
         }
 

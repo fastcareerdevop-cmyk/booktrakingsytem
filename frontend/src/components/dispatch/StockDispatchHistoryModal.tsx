@@ -422,3 +422,4 @@ export const StockDispatchHistoryModal: React.FC<Props> = ({ isOpen, onClose }) 
     </div>
   );
 };
+

@@ -10,7 +10,7 @@ function getAudioContext(): AudioContext | null {
       }
     }
     if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume();
+      audioCtx.resume().catch(() => {});
     }
     return audioCtx;
   } catch {
@@ -24,6 +24,9 @@ function getAudioContext(): AudioContext | null {
 export function playSuccessChime() {
   const ctx = getAudioContext();
   if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
 
   const now = ctx.currentTime;
   const osc1 = ctx.createOscillator();
@@ -58,6 +61,9 @@ export function playSuccessChime() {
 export function playErrorTone() {
   const ctx = getAudioContext();
   if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
 
   const now = ctx.currentTime;
   const osc = ctx.createOscillator();
@@ -78,11 +84,14 @@ export function playErrorTone() {
 }
 
 /**
- * Celebratory 3-note fanfare when all books for an order are finished
+ * Celebratory 4-note fanfare when all books for an order are finished
  */
 export function playOrderCompleteFanfare() {
   const ctx = getAudioContext();
   if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    ctx.resume().catch(() => {});
+  }
 
   const now = ctx.currentTime;
   const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
@@ -94,7 +103,7 @@ export function playOrderCompleteFanfare() {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, noteStart);
 
-    gain.gain.setValueAtTime(0.22, noteStart);
+    gain.gain.setValueAtTime(0.25, noteStart);
     gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.4);
 
     osc.connect(gain);
@@ -108,6 +117,40 @@ export function playOrderCompleteFanfare() {
 // Persistent array holding active utterances to prevent Chromium garbage collection bug
 const activeSpeechUtterances: SpeechSynthesisUtterance[] = [];
 
+// Cache voices once loaded
+let cachedVoices: SpeechSynthesisVoice[] = [];
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  cachedVoices = window.speechSynthesis.getVoices();
+  window.speechSynthesis.onvoiceschanged = () => {
+    cachedVoices = window.speechSynthesis.getVoices();
+  };
+}
+
+function getBestVoice(): SpeechSynthesisVoice | undefined {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return undefined;
+  const voices = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
+  return (
+    voices.find((v) => v.lang.includes('IN') && (v.name.includes('India') || v.name.includes('English'))) ||
+    voices.find((v) => v.lang.includes('en-IN')) ||
+    voices.find((v) => v.lang.includes('en-GB')) ||
+    voices.find((v) => v.lang.includes('en-US')) ||
+    voices[0]
+  );
+}
+
+/**
+ * Ensures browser speech synthesis engine is unlocked and active
+ */
+function wakeSpeechSynthesis() {
+  try {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+    }
+  } catch {}
+}
+
 /**
  * Speaks a clear human voice announcement (Paytm Soundbox style)
  * e.g., "Done! Next order."
@@ -115,7 +158,10 @@ const activeSpeechUtterances: SpeechSynthesisUtterance[] = [];
 export function speakVoiceAnnouncement(text: string, onEnd?: () => void) {
   try {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+      wakeSpeechSynthesis();
       activeSpeechUtterances.length = 0;
 
       setTimeout(() => {
@@ -124,12 +170,12 @@ export function speakVoiceAnnouncement(text: string, onEnd?: () => void) {
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
 
-        const voices = window.speechSynthesis.getVoices();
-        const preferredVoice = voices.find(
-          (v) => v.lang.includes('IN') || v.lang.includes('en-GB') || v.lang.includes('en-US')
-        );
+        const preferredVoice = getBestVoice();
         if (preferredVoice) {
           utterance.voice = preferredVoice;
+          utterance.lang = preferredVoice.lang;
+        } else {
+          utterance.lang = 'en-US';
         }
 
         activeSpeechUtterances.push(utterance);
@@ -143,10 +189,13 @@ export function speakVoiceAnnouncement(text: string, onEnd?: () => void) {
         utterance.onerror = () => {
           const idx = activeSpeechUtterances.indexOf(utterance);
           if (idx !== -1) activeSpeechUtterances.splice(idx, 1);
+          wakeSpeechSynthesis();
           onEnd?.();
         };
 
+        wakeSpeechSynthesis();
         window.speechSynthesis.speak(utterance);
+        wakeSpeechSynthesis();
       }, 60);
     } else {
       onEnd?.();
@@ -172,13 +221,13 @@ export function speakVoiceTwice(
       return;
     }
 
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {}
+    wakeSpeechSynthesis();
     activeSpeechUtterances.length = 0;
 
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(
-      (v) => v.lang.includes('IN') || v.lang.includes('en-GB') || v.lang.includes('en-US')
-    );
+    const preferredVoice = getBestVoice();
 
     let hasCompleted = false;
     const triggerComplete = () => {
@@ -195,6 +244,9 @@ export function speakVoiceTwice(
       utterance.volume = 1.0;
       if (preferredVoice) {
         utterance.voice = preferredVoice;
+        utterance.lang = preferredVoice.lang;
+      } else {
+        utterance.lang = 'en-US';
       }
 
       activeSpeechUtterances.push(utterance);
@@ -220,6 +272,7 @@ export function speakVoiceTwice(
         console.warn('Speech synthesis error in iteration:', e);
         const idx = activeSpeechUtterances.indexOf(utterance);
         if (idx !== -1) activeSpeechUtterances.splice(idx, 1);
+        wakeSpeechSynthesis();
 
         if (!isSecond) {
           setTimeout(() => speakIteration(true), pauseMs);
@@ -228,7 +281,9 @@ export function speakVoiceTwice(
         }
       };
 
+      wakeSpeechSynthesis();
       window.speechSynthesis.speak(utterance);
+      wakeSpeechSynthesis();
     };
 
     setTimeout(() => {
