@@ -55,6 +55,12 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   const countdownIntervalRef = useRef<any>(null);
   const isVerifyingRef = useRef(false);
 
+  // Tracking ID Match State (Optional)
+  const [trackingInput, setTrackingInput] = useState('');
+  const [trackingMatchStatus, setTrackingMatchStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
+  const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
+  const trackingInputRef = useRef<HTMLInputElement>(null);
+
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'warning' | 'completed' | null;
     message: string;
@@ -73,6 +79,9 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       setLastDispatchedItemId(null);
       setScanHistory([]);
       setShowPaytmSuccess(false);
+      setTrackingInput('');
+      setTrackingMatchStatus('idle');
+      setTrackingErrorMessage('');
       if (autoCloseTimerRef.current) {
         clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
@@ -92,25 +101,6 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     };
   }, []);
 
-  // Handle countdown tick for Paytm success overlay
-  useEffect(() => {
-    if (!showPaytmSuccess) return;
-
-    countdownIntervalRef.current = setInterval(() => {
-      setSuccessCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdownIntervalRef.current!);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    };
-  }, [showPaytmSuccess]);
-
   const handleDismissSuccessOverlay = () => {
     if (autoCloseTimerRef.current) {
       clearTimeout(autoCloseTimerRef.current);
@@ -121,6 +111,9 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       countdownIntervalRef.current = null;
     }
     setShowPaytmSuccess(false);
+    setTrackingInput('');
+    setTrackingMatchStatus('idle');
+    setTrackingErrorMessage('');
 
     if (hasNextOrder && onProceedNextOrder) {
       onProceedNextOrder();
@@ -128,6 +121,80 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       onClose();
     }
   };
+
+  const handleTrackingSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const scanned = trackingInput.trim().toUpperCase();
+    if (!scanned || !activeOrder) return;
+
+    const cleanScanned = scanned.replace(/[\s\-_]/g, '');
+    const cleanExpectedTracking = (activeOrder.trackingId || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
+    const cleanExpectedOrder = (activeOrder.orderCode || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
+
+    const isMatch = (cleanExpectedTracking && cleanScanned === cleanExpectedTracking) ||
+                    (cleanExpectedOrder && cleanScanned === cleanExpectedOrder);
+
+    if (isMatch) {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+      setTrackingMatchStatus('matched');
+      setTrackingErrorMessage('');
+      if (soundEnabled) {
+        playSuccessChime();
+        speakVoiceAnnouncement('Tracking ID matched. Parcel verified.');
+      }
+      setTimeout(() => {
+        handleDismissSuccessOverlay();
+      }, 1200);
+    } else {
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+      setTrackingMatchStatus('mismatch');
+      setTrackingErrorMessage(`Scanned: "${scanned}" | Expected: "${activeOrder.trackingId || activeOrder.orderCode}"`);
+      if (soundEnabled) {
+        playErrorTone();
+        speakErrorMessage('Tracking ID does not match this parcel. Please scan the correct parcel or click skip.');
+      }
+      setTrackingInput('');
+      setTimeout(() => {
+        trackingInputRef.current?.focus();
+      }, 100);
+    }
+  };
+
+  // Focus tracking input automatically when success overlay appears
+  useEffect(() => {
+    if (showPaytmSuccess) {
+      const timer = setTimeout(() => {
+        trackingInputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [showPaytmSuccess]);
+
+  // Handle countdown tick for Paytm success overlay (FREEZES on mismatch or matched)
+  useEffect(() => {
+    if (!showPaytmSuccess || trackingMatchStatus === 'mismatch' || trackingMatchStatus === 'matched') return;
+
+    countdownIntervalRef.current = setInterval(() => {
+      setSuccessCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownIntervalRef.current!);
+          handleDismissSuccessOverlay();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    };
+  }, [showPaytmSuccess, trackingMatchStatus]);
 
   // Focus input automatically whenever modal opens or an item is scanned
   useEffect(() => {
@@ -389,27 +456,103 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
             </div>
 
             {/* Confirmation Banner */}
-            <div className="inline-block bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full mb-2 border border-emerald-200">
+            <div className="inline-block bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full mb-1 border border-emerald-200">
               ✓ ORDER VERIFIED & DISPATCHED
             </div>
-            <h3 className="text-2xl font-black text-slate-900 tracking-tight">
+            <h3 className="text-xl font-black text-slate-900 tracking-tight">
               {activeOrder.studentName || 'Order Completed!'}
             </h3>
-            <p className="text-sm font-semibold text-emerald-600 mt-1 flex items-center justify-center gap-1.5">
+            <p className="text-xs font-semibold text-emerald-600 mt-0.5 flex items-center justify-center gap-1.5">
               <span>All Books Verified & Full Filled</span>
             </p>
-            
-            <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs font-medium">
+
+            {/* ─── Tracking ID Match Section (Optional) ─── */}
+            <div className="mt-3.5 pt-3 border-t border-slate-100 text-left">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+                  <Barcode className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Tracking ID Match (Optional):</span>
+                </span>
+                {activeOrder.trackingId && (
+                  <span className="font-mono text-[11px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
+                    {activeOrder.trackingId}
+                  </span>
+                )}
+              </div>
+
+              {trackingMatchStatus === 'matched' ? (
+                <div className="p-2.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 flex items-center justify-center gap-2 animate-pulse">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold">✓ Tracking ID Matched! Moving to next order...</span>
+                </div>
+              ) : (
+                <form onSubmit={handleTrackingSubmit} className="space-y-1.5">
+                  <div className="relative flex items-center">
+                    <input
+                      ref={trackingInputRef}
+                      type="text"
+                      value={trackingInput}
+                      onChange={(e) => setTrackingInput(e.target.value.toUpperCase())}
+                      placeholder="Scan or type Tracking ID from parcel..."
+                      className={`w-full px-3 py-2 pr-16 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all ${
+                        trackingMatchStatus === 'mismatch'
+                          ? 'bg-rose-50 border-2 border-rose-500 text-rose-900 focus:ring-2 focus:ring-rose-300'
+                          : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100'
+                      }`}
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      disabled={!trackingInput.trim()}
+                      className="absolute right-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-lg text-[11px] transition-colors cursor-pointer"
+                    >
+                      Match
+                    </button>
+                  </div>
+
+                  {trackingMatchStatus === 'mismatch' && (
+                    <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold flex items-start gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <div>{trackingErrorMessage}</div>
+                        <div className="text-[10px] text-rose-600 mt-0.5">Sahi tracking ID scan karein ya Skip button dabayein.</div>
+                      </div>
+                    </div>
+                  )}
+                </form>
+              )}
+            </div>
+
+            {/* Action buttons footer */}
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-medium">
               <div className="flex items-center gap-1.5 text-slate-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                <span>Next in: <strong className="font-mono text-emerald-700 font-bold">{successCountdown}s</strong></span>
+                {trackingMatchStatus === 'mismatch' ? (
+                  <span className="text-rose-600 font-bold flex items-center gap-1 text-[11px]">
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span>Waiting for match...</span>
+                  </span>
+                ) : trackingMatchStatus === 'matched' ? (
+                  <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    <span>Verified ✓</span>
+                  </span>
+                ) : (
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span>Next in: <strong className="font-mono text-emerald-700 font-bold">{successCountdown}s</strong></span>
+                  </>
+                )}
               </div>
 
               <button
                 onClick={handleDismissSuccessOverlay}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                className={`px-4 py-2 font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 ${
+                  trackingMatchStatus === 'mismatch'
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }`}
               >
-                <span>{hasNextOrder ? 'अगला आर्डर' : 'Done & Close'}</span>
+                <span>{trackingMatchStatus === 'mismatch' ? 'Skip & Next (छोड़ें)' : (hasNextOrder ? 'अगला आर्डर (Skip)' : 'Done & Close')}</span>
                 <ArrowRight size={13} />
               </button>
             </div>
