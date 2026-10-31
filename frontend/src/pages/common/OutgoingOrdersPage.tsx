@@ -196,12 +196,15 @@ export const OutgoingOrdersPage: React.FC = () => {
         currentOrder.items?.some((i: any) => i.productCode && i.productCode.replace(/[\s\-_]/g, '').toUpperCase() === cleanUpper)
       );
 
-      // If code starts with ORD-, UNQ-, or is a 9+ digit date code (DDMMYYNNN), or matches an order code, it's a new Order Code scan
+      // If code starts with ORD-, UNQ-, or is a 9+ digit date code (DDMMYYNNN), or matches an order code or tracking ID, it's a new Order Code scan
       const isNewOrderCode = !isCurrentOrderBook && !isCurrentOrderProduct && (
         cleanCode.startsWith('ORD-') ||
         cleanCode.startsWith('UNQ-') ||
         /^\d{6}\d{3,}$/.test(cleanCode) ||
-        orders.some(o => o.orderCode?.toUpperCase() === cleanCode)
+        orders.some(o => 
+          o.orderCode?.toUpperCase() === cleanCode || 
+          o.trackingId?.toUpperCase() === cleanCode
+        )
       );
 
       const activeOrderId = !isNewOrderCode && currentOrder?.id && currentOrder.totalPending > 0
@@ -253,16 +256,25 @@ export const OutgoingOrdersPage: React.FC = () => {
             items: updatedOrder.items || [],
           };
 
-          if (isLoadedOnly) {
-            lastScannedOrderRef.current = formattedOrder;
-            setLastScannedOrder(formattedOrder);
+          lastScannedOrderRef.current = formattedOrder;
+          setLastScannedOrder(formattedOrder);
+
+          // Find or construct full order object for modal
+          const matchedFullOrder = orders.find(o => o.id === updatedOrder.id);
+          const fullOrderForModal: Order = matchedFullOrder ? {
+            ...matchedFullOrder,
+            ...updatedOrder,
+            items: updatedOrder.items || matchedFullOrder.items,
+          } : (updatedOrder as unknown as Order);
+
+          // 🌟 OPEN DISPATCH BOX MODAL AUTOMATICALLY FOR STUDENT SCAN!
+          if (isLoadedOnly || data.scanType === 'ORDER_LOADED') {
+            setSelectedOrderForDispatch(fullOrderForModal);
+            setIsDispatchBoxOpen(true);
             if (soundEnabled) {
               playSuccessChime();
               speakVoiceAnnouncement(`New order received. Order for ${updatedOrder.studentName}`);
             }
-          } else {
-            lastScannedOrderRef.current = formattedOrder;
-            setLastScannedOrder(formattedOrder);
           }
 
           // Live update orders list in table
@@ -500,8 +512,12 @@ export const OutgoingOrdersPage: React.FC = () => {
     const trimmed = scannerCode.trim().toUpperCase();
     if (!trimmed || isScanning || isScanningRef.current) return;
 
-    // 1. Instant trigger if complete Order Code format (ORD-YYMM-NNNNN, UNQ-YYMM-NNNNN, or 9-digit DDMMYYNNN)
-    if (/^(ORD|UNQ)-\d{4}-\d{5}$/i.test(trimmed) || /^\d{9}$/.test(trimmed)) {
+    // 1. Instant trigger if complete Order Code format (ORD-YYMM-NNNNN, UNQ-YYMM-NNNNN, or 9-digit DDMMYYNNN) or matches order
+    if (
+      /^(ORD|UNQ)-\d{4}-\d{5}$/i.test(trimmed) || 
+      /^\d{9}$/.test(trimmed) ||
+      orders.some(o => o.orderCode?.toUpperCase() === trimmed || o.trackingId?.toUpperCase() === trimmed)
+    ) {
       handleGlobalScan(trimmed);
       return;
     }

@@ -182,6 +182,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       });
 
       if (res.data.success) {
+        const isLoadedOnly = res.data.data.scanType === 'ORDER_LOADED';
         const isOrderScan = res.data.data.scanType === 'ORDER_CODE';
         const isProductScan = res.data.data.scanType === 'PRODUCT_CODE';
         const updatedOrderData: Order = res.data.data.order;
@@ -191,6 +192,24 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         setActiveOrder(updatedOrderData);
         if (updatedItemData) {
           setLastDispatchedItemId(updatedItemData.id);
+        }
+
+        // 🌟 If another student barcode was scanned while modal is open, switch directly to that student!
+        if (isLoadedOnly) {
+          setShowPaytmSuccess(false);
+          setScanHistory([]);
+          if (soundEnabled) {
+            playSuccessChime();
+            speakVoiceAnnouncement(`New order received. Order for ${updatedOrderData.studentName}`);
+          }
+          setFeedback({
+            type: 'success',
+            message: `Order for ${updatedOrderData.studentName} loaded! Scan Product Code or Book Code to dispatch.`,
+          });
+          if (onOrderUpdated) {
+            onOrderUpdated(updatedOrderData);
+          }
+          return;
         }
 
         // Add to live scan log
