@@ -151,13 +151,25 @@ function wakeSpeechSynthesis() {
   } catch {}
 }
 
+let lastSpokenText = '';
+let lastSpokenTimestamp = 0;
+
 /**
- * Speaks a clear human voice announcement (Paytm Soundbox style)
- * e.g., "Done! Next order."
+ * Speaks a clear human voice announcement (Paytm Soundbox style) exactly ONCE
+ * e.g., "Order of upcoming CA is fulfilled at FAST Education. Next order, please."
  */
 export function speakVoiceAnnouncement(text: string, onEnd?: () => void) {
   try {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const now = Date.now();
+      // Deduplicate rapid duplicate calls of the same message within 2.5 seconds
+      if (text === lastSpokenText && now - lastSpokenTimestamp < 2500) {
+        onEnd?.();
+        return;
+      }
+      lastSpokenText = text;
+      lastSpokenTimestamp = now;
+
       try {
         window.speechSynthesis.cancel();
       } catch {}
@@ -207,92 +219,14 @@ export function speakVoiceAnnouncement(text: string, onEnd?: () => void) {
 }
 
 /**
- * Speaks an announcement exactly 2 times with a natural pause in between,
- * and executes onAllDone ONLY after the 2nd time has completely finished speaking!
+ * Speaks an announcement exactly 1 time (single clean playback).
  */
 export function speakVoiceTwice(
   text: string,
   onAllDone?: () => void,
-  pauseMs: number = 700
+  _pauseMs: number = 700
 ) {
-  try {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      onAllDone?.();
-      return;
-    }
-
-    try {
-      window.speechSynthesis.cancel();
-    } catch {}
-    wakeSpeechSynthesis();
-    activeSpeechUtterances.length = 0;
-
-    const preferredVoice = getBestVoice();
-
-    let hasCompleted = false;
-    const triggerComplete = () => {
-      if (!hasCompleted) {
-        hasCompleted = true;
-        onAllDone?.();
-      }
-    };
-
-    const speakIteration = (isSecond: boolean) => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95; // Clear natural pacing so words are crisp
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-        utterance.lang = preferredVoice.lang;
-      } else {
-        utterance.lang = 'en-US';
-      }
-
-      activeSpeechUtterances.push(utterance);
-
-      utterance.onend = () => {
-        const idx = activeSpeechUtterances.indexOf(utterance);
-        if (idx !== -1) activeSpeechUtterances.splice(idx, 1);
-
-        if (!isSecond) {
-          // Pause between 1st and 2nd announcement
-          setTimeout(() => {
-            speakIteration(true);
-          }, pauseMs);
-        } else {
-          // 2nd announcement finished speaking completely!
-          setTimeout(() => {
-            triggerComplete();
-          }, 800);
-        }
-      };
-
-      utterance.onerror = (e) => {
-        console.warn('Speech synthesis error in iteration:', e);
-        const idx = activeSpeechUtterances.indexOf(utterance);
-        if (idx !== -1) activeSpeechUtterances.splice(idx, 1);
-        wakeSpeechSynthesis();
-
-        if (!isSecond) {
-          setTimeout(() => speakIteration(true), pauseMs);
-        } else {
-          triggerComplete();
-        }
-      };
-
-      wakeSpeechSynthesis();
-      window.speechSynthesis.speak(utterance);
-      wakeSpeechSynthesis();
-    };
-
-    setTimeout(() => {
-      speakIteration(false);
-    }, 100);
-  } catch (e) {
-    console.error('Speech synthesis error in speakVoiceTwice:', e);
-    onAllDone?.();
-  }
+  speakVoiceAnnouncement(text, onAllDone);
 }
 
 /**

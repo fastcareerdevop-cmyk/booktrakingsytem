@@ -279,7 +279,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
           // 1. Play 4-note celebration fanfare & speak Paytm-style voice announcement twice
           if (soundEnabled) {
             playOrderCompleteFanfare();
-            speakVoiceTwice('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
+            speakVoiceAnnouncement('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
           }
 
           // 2. Show the animated Paytm circular checkmark ("RIGHT KA CLICK") overlay

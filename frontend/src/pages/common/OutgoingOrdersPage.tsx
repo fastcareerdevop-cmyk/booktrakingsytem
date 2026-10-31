@@ -369,7 +369,7 @@ export const OutgoingOrdersPage: React.FC = () => {
 
           if (soundEnabled) {
             playOrderCompleteFanfare();
-            speakVoiceTwice('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
+            speakVoiceAnnouncement('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
           }
         }
       }
@@ -535,7 +535,7 @@ export const OutgoingOrdersPage: React.FC = () => {
         }
         if (soundEnabled) {
           playOrderCompleteFanfare();
-          speakVoiceTwice('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
+          speakVoiceAnnouncement('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
         }
       }
     } catch (err: any) {
