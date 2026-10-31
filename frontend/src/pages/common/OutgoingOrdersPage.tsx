@@ -36,6 +36,9 @@ import {
   QrCode,
   Mail,
   BarChart2,
+  PackageCheck,
+  Barcode,
+  Phone,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { playSuccessChime, playErrorTone, playOrderCompleteFanfare, speakVoiceAnnouncement, speakVoiceTwice, speakErrorMessage } from '../../utils/sound';
@@ -94,9 +97,11 @@ export const OutgoingOrdersPage: React.FC = () => {
 
   // ─── Global Scanner State ────────────────────────────────────────────────────
   const [scannerCode, setScannerCode] = useState('');
+  const [innerBookCode, setInnerBookCode] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [lastScannedOrder, setLastScannedOrder] = useState<any>(null);
   const lastScannedOrderRef = useRef<any>(null);
+  const innerInputRef = useRef<HTMLInputElement>(null);
 
   const [showPaytmSuccess, setShowPaytmSuccess] = useState(false);
   const [completedStudentName, setCompletedStudentName] = useState('');
@@ -259,22 +264,14 @@ export const OutgoingOrdersPage: React.FC = () => {
           lastScannedOrderRef.current = formattedOrder;
           setLastScannedOrder(formattedOrder);
 
-          // Find or construct full order object for modal
-          const matchedFullOrder = orders.find(o => o.id === updatedOrder.id);
-          const fullOrderForModal: Order = matchedFullOrder ? {
-            ...matchedFullOrder,
-            ...updatedOrder,
-            items: updatedOrder.items || matchedFullOrder.items,
-          } : (updatedOrder as unknown as Order);
-
-          // 🌟 OPEN DISPATCH BOX MODAL AUTOMATICALLY FOR STUDENT SCAN!
           if (isLoadedOnly || data.scanType === 'ORDER_LOADED') {
-            setSelectedOrderForDispatch(fullOrderForModal);
-            setIsDispatchBoxOpen(true);
             if (soundEnabled) {
               playSuccessChime();
               speakVoiceAnnouncement(`New order received. Order for ${updatedOrder.studentName}`);
             }
+            setTimeout(() => {
+              innerInputRef.current?.focus() || scanInputRef.current?.focus();
+            }, 100);
           }
 
           // Live update orders list in table
@@ -629,8 +626,12 @@ export const OutgoingOrdersPage: React.FC = () => {
   }, [search, status, batchId, dateFilter, startDate, endDate]);
 
   const handleOpenDispatchBox = (order: Order) => {
-    setSelectedOrderForDispatch(order);
-    setIsDispatchBoxOpen(true);
+    lastScannedOrderRef.current = order;
+    setLastScannedOrder(order);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+      innerInputRef.current?.focus() || scanInputRef.current?.focus();
+    }, 150);
   };
 
   const handleCloseDispatchBox = () => {
@@ -908,280 +909,424 @@ export const OutgoingOrdersPage: React.FC = () => {
           <span className="flex items-center gap-1"><BookOpen size={13} className="text-red-700" /> <strong>Step 2 (Single)</strong>: Scan individual <strong>Book Barcodes</strong> to tick one-by-one</span>
         </div>
 
-        {/* ─── Zero-Click Live Verification Deck (Shows immediately on scan) ──── */}
+        {/* ─── 2-COLUMN ORDER VERIFICATION DECK (Image 2 clean layout under scanner bar) ──── */}
         {lastScannedOrder && (
-          <div className="mt-4 bg-slate-900 text-white rounded-2xl p-5 shadow-xl border border-slate-700 transition-all">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3 mb-4">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="mt-4 bg-white rounded-2xl p-4 sm:p-5 shadow-xl border-2 border-red-200 animate-in fade-in duration-200 text-slate-800">
+            {/* Top Deck Header: Close Button and Order Title */}
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200">
+              <div className="flex items-center gap-2">
                 <span className="font-mono text-xs font-bold bg-red-600 text-white px-2.5 py-1 rounded">
                   {lastScannedOrder.trackingId}
                 </span>
-                <span className="text-base sm:text-lg font-black text-white">
+                <span className="text-base sm:text-lg font-black text-slate-900">
                   {lastScannedOrder.studentName}
                 </span>
-                <span className="text-xs text-slate-400 font-mono">
-                  📞 {lastScannedOrder.mobileNumber}
-                </span>
-                {lastScannedOrder.orderCode && (
-                  <span className="text-xs font-mono bg-emerald-950 text-emerald-300 border border-emerald-600 px-2.5 py-1 rounded font-bold">
-                    🔖 {lastScannedOrder.orderCode}
-                  </span>
-                )}
-                {lastScannedOrder.productCode && (
-                  <span className="text-xs font-mono bg-purple-950 text-purple-300 border border-purple-600 px-2.5 py-1 rounded font-bold">
-                    📦 {lastScannedOrder.productCode}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
                   lastScannedOrder.totalPending === 0
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse'
-                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    : 'bg-amber-100 text-amber-800 border border-amber-300'
                 }`}>
-                  {lastScannedOrder.totalPending === 0 ? '✓ Order Completed (Auto-closing...)' : 'In Progress'}
-                </span>
-                <button
-                  onClick={() => {
-                    if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
-                    setLastScannedOrder(null);
-                    setScanResult({ type: null, message: '' });
-                  }}
-                  className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer"
-                  title="Close preview"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
-
-            {/* ─── HIGHLIGHTED: ORDER ITEM / COURSE (BIG FONT & HIGHLIGHT) ─── */}
-            <div className="mb-5 p-5 rounded-2xl bg-[#DE3744] text-white shadow-2xl border-2 border-[#ff838c]/40 ring-4 ring-[#DE3744]/20">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/20 pb-2 mb-3">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-white animate-pulse" />
-                  <span className="text-xs font-black uppercase tracking-widest text-white/90">
-                    ORDER ITEM / COURSE
-                  </span>
-                </div>
-                <span className="text-xs font-bold bg-white text-[#DE3744] px-3 py-1 rounded-full shadow-xs">
-                  {lastScannedOrder.items.length} {lastScannedOrder.items.length === 1 ? 'Book' : 'Books'} in Package
+                  {lastScannedOrder.totalPending === 0 ? '✓ Order Completed' : 'Pending Verification'}
                 </span>
               </div>
-
-              {/* Big Font Highlighted Item Name */}
-              <div className="space-y-2">
-                {(() => {
-                  const productNames = Array.from(new Set(lastScannedOrder.items.map((i: any) => i.productName).filter(Boolean)));
-                  if (productNames.length > 0) {
-                    return (
-                      <div className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-wide leading-tight drop-shadow-md">
-                        📦 {productNames.join(' + ')}
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
-                {/* Highlighted book titles */}
-                <div className="flex flex-wrap gap-2.5 pt-1">
-                  {lastScannedOrder.items.map((item: any, idx: number) => (
-                    <div
-                      key={item.id || idx}
-                      className="bg-black/25 backdrop-blur-sm px-3.5 py-2 rounded-xl border border-white/30 flex items-center gap-2 shadow-sm"
-                    >
-                      <BookOpen size={18} className="text-white shrink-0" />
-                      <div>
-                        <span className="text-base sm:text-lg font-black text-white">{item.bookName}</span>
-                        <span className="ml-2 font-mono text-xs font-black bg-white text-[#DE3744] px-2.5 py-0.5 rounded-md shadow-xs">
-                          {item.bookCode}
-                        </span>
-                        <span className="ml-1.5 text-xs text-white font-bold">
-                          ({item.dispatchedQuantity}/{item.requiredQuantity})
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Metric counters: Total Required, Dispatched, Remaining */}
-            <div className="grid grid-cols-3 gap-3 mb-4 text-center">
-              <div className="bg-slate-800/80 rounded-xl p-3 border border-slate-700/80">
-                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Total Required</div>
-                <div className="text-2xl font-black text-white font-mono mt-0.5">{lastScannedOrder.totalRequired}</div>
-              </div>
-              <div className="bg-emerald-950/40 rounded-xl p-3 border border-emerald-800/60">
-                <div className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Dispatched</div>
-                <div className="text-2xl font-black text-emerald-400 font-mono mt-0.5">{lastScannedOrder.totalDispatched}</div>
-              </div>
-              <div className="bg-amber-950/40 rounded-xl p-3 border border-amber-800/60">
-                <div className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">Remaining Left</div>
-                <div className="text-2xl font-black text-amber-400 font-mono mt-0.5">{lastScannedOrder.totalPending}</div>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="w-full bg-slate-800 rounded-full h-2 mb-4 overflow-hidden">
-              <div
-                className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
-                style={{
-                  width: `${lastScannedOrder.totalRequired > 0
-                    ? Math.round((lastScannedOrder.totalDispatched / lastScannedOrder.totalRequired) * 100)
-                    : 0}%`
+              <button
+                onClick={() => {
+                  if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
+                  setLastScannedOrder(null);
+                  lastScannedOrderRef.current = null;
+                  setScanResult({ type: null, message: '' });
+                  setTimeout(() => scanInputRef.current?.focus(), 50);
                 }}
-              />
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer flex items-center gap-1 text-xs font-bold"
+                title="Close active order & return to search bar"
+              >
+                <span>Close</span>
+                <X size={16} />
+              </button>
             </div>
 
-            {/* ─── 1. Dedicated Product Code Verification Box ──── */}
-            {lastScannedOrder.productCode && (() => {
-              const isProductDone = lastScannedOrder.items
-                .filter((i: any) => !i.productCode || i.productCode === lastScannedOrder.productCode)
-                .every((i: any) => i.dispatchedQuantity >= i.requiredQuantity);
-              return (
-                <div className={`mb-4 p-4 rounded-xl border-2 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                  isProductDone
-                    ? 'bg-emerald-950/60 border-emerald-500 shadow-md ring-1 ring-emerald-500/40'
-                    : 'bg-purple-950/40 border-purple-500/70 shadow-sm'
-                }`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 ${
-                      isProductDone ? 'bg-emerald-500 text-slate-950' : 'bg-purple-600 text-white'
-                    }`}>
-                      <Package size={22} />
+            {/* 2-COLUMN HORIZONTAL GRID */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              
+              {/* ─── LEFT HALF: COURSE, STUDENT DETAILS & SCANNER INPUT ─── */}
+              <div className="space-y-3.5">
+                {/* 1. COURSE / PRODUCT HIGHLIGHT CARD */}
+                <div className="p-3.5 rounded-2xl bg-[#DE3744] text-white shadow-lg border-2 border-[#ff838c]/40 ring-2 ring-[#DE3744]/20">
+                  <div className="space-y-2">
+                    {(() => {
+                      const productNames = Array.from(new Set(lastScannedOrder.items?.map((i: any) => i.productName).filter(Boolean) || []));
+                      if (productNames.length > 0) {
+                        return (
+                          <div className="text-xl sm:text-2xl font-black text-white tracking-wide leading-tight drop-shadow-md">
+                            📦 {productNames.join(' + ')}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="text-xl sm:text-2xl font-black text-white tracking-wide leading-tight drop-shadow-md">
+                          📦 {lastScannedOrder.productCode || 'Course Package'}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Book Titles in badges */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {lastScannedOrder.items?.map((item: any, idx: number) => (
+                        <div
+                          key={item.id || idx}
+                          className="bg-black/25 backdrop-blur-sm px-2.5 py-1 rounded-xl border border-white/30 flex items-center gap-2 shadow-xs"
+                        >
+                          <span className="text-xs sm:text-sm font-black text-white">{item.bookName}</span>
+                          <span className="font-mono text-[11px] font-black bg-white text-[#DE3744] px-2 py-0.5 rounded-md shadow-2xs">
+                            {item.bookCode}
+                          </span>
+                          <span className="text-[11px] text-white font-bold">
+                            ({item.dispatchedQuantity}/{item.requiredQuantity})
+                          </span>
+                        </div>
+                      ))}
                     </div>
+                  </div>
+                </div>
+
+                {/* 2. STUDENT DETAILS & COMPACT COUNTERS CARD */}
+                <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-2xl p-3.5 shadow-md border border-slate-700/60">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2.5 border-b border-slate-700/80">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">Product Package Code (Combo)</span>
-                        <span className="text-xs bg-purple-900/80 text-purple-200 border border-purple-600 px-2 py-0.5 rounded font-mono font-bold">
-                          {lastScannedOrder.productCode}
+                        <span className="font-mono text-xs font-bold bg-red-500/20 text-red-300 px-2 py-0.5 rounded border border-red-400/30">
+                          {lastScannedOrder.trackingId}
+                        </span>
+                        <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                          {lastScannedOrder.studentName}
+                        </h2>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 mt-1">
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3.5 h-3.5 text-slate-400" />
+                          <strong className="font-mono">{lastScannedOrder.mobileNumber}</strong>
                         </span>
                       </div>
-                      <div className="text-sm font-semibold text-white mt-0.5">
-                        {isProductDone
-                          ? `All ${lastScannedOrder.items.length} book(s) in combo verified & dispatched`
-                          : `Scan product barcode or click mark to verify & dispatch all combo books`}
+                    </div>
+
+                    {/* Sound Toggle & Status */}
+                    <div className="flex items-center gap-2 self-start sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => setSoundEnabled(!soundEnabled)}
+                        className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors ${
+                          soundEnabled
+                            ? 'bg-slate-700 text-red-300 hover:bg-slate-600'
+                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                        }`}
+                        title={soundEnabled ? 'Scanner Sound Enabled' : 'Scanner Sound Muted'}
+                      >
+                        {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                        <span className="text-[11px] hidden sm:inline">{soundEnabled ? 'Sound On' : 'Muted'}</span>
+                      </button>
+                      <Badge status={lastScannedOrder.status} />
+                    </div>
+                  </div>
+
+                  {/* Real-time Order Quantities Bar - Compact Size */}
+                  <div className="grid grid-cols-3 gap-1.5 pt-2 text-center">
+                    <div className="bg-slate-800/80 rounded-lg py-1.5 px-2 border border-slate-700/50">
+                      <span className="text-[9px] text-slate-400 uppercase font-semibold tracking-wider block">
+                        Total Required
+                      </span>
+                      <div className="text-sm sm:text-base font-bold font-mono text-white mt-0.5">
+                        {lastScannedOrder.totalRequired}
+                      </div>
+                    </div>
+
+                    <div className="bg-emerald-950/30 rounded-lg py-1.5 px-2 border border-emerald-800/40">
+                      <span className="text-[9px] text-emerald-400 uppercase font-semibold tracking-wider block">
+                        Dispatched
+                      </span>
+                      <div className="text-sm sm:text-base font-bold font-mono text-emerald-400 mt-0.5 flex items-center justify-center gap-1">
+                        <span>{lastScannedOrder.totalDispatched}</span>
+                        {lastScannedOrder.totalDispatched > 0 && <span className="text-xs">✓</span>}
+                      </div>
+                    </div>
+
+                    <div className={`rounded-lg py-1.5 px-2 border ${
+                      lastScannedOrder.totalPending === 0
+                        ? 'bg-emerald-900/40 border-emerald-600/50'
+                        : 'bg-amber-950/30 border-amber-800/40'
+                    }`}>
+                      <span className="text-[9px] text-amber-400 uppercase font-semibold tracking-wider block">
+                        Remaining
+                      </span>
+                      <div className="text-sm sm:text-base font-bold font-mono text-amber-400 mt-0.5">
+                        {lastScannedOrder.totalPending}
                       </div>
                     </div>
                   </div>
 
-                  {/* Verification Mark / Box for Product */}
-                  <div className="shrink-0">
-                    {isProductDone ? (
-                      <div className="flex items-center gap-2 bg-emerald-500 text-slate-950 px-4 py-2.5 rounded-xl font-bold text-sm shadow-md">
-                        <CheckCircle2 size={18} className="text-slate-950" />
-                        <span>Code Verified & Done</span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleGlobalScan(lastScannedOrder.productCode)}
-                        disabled={isScanning}
-                        className="flex items-center gap-2.5 bg-purple-600 hover:bg-purple-500 text-white border-2 border-purple-400 px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all hover:scale-102 cursor-pointer group disabled:opacity-50"
-                        title="Scan product barcode or click this mark to verify and dispatch entire combo"
-                      >
-                        <div className="w-5 h-5 rounded-md border-2 border-white/70 group-hover:border-white flex items-center justify-center bg-purple-700/50">
-                          {/* Unchecked square box */}
-                        </div>
-                        <span>Scan or Click Mark to Verify & Done</span>
-                      </button>
-                    )}
+                  {/* Progress Bar */}
+                  <div className="mt-2.5">
+                    <div className="flex justify-between items-center text-[10px] text-slate-300 font-medium mb-1">
+                      <span>Student Dispatch Progress</span>
+                      <span>
+                        {lastScannedOrder.totalRequired > 0 ? Math.round((lastScannedOrder.totalDispatched / lastScannedOrder.totalRequired) * 100) : 0}% ({lastScannedOrder.totalDispatched} of {lastScannedOrder.totalRequired} books)
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ease-out ${
+                          lastScannedOrder.totalPending === 0 ? 'bg-emerald-400' : 'bg-red-500'
+                        }`}
+                        style={{
+                          width: `${lastScannedOrder.totalRequired > 0 ? Math.round((lastScannedOrder.totalDispatched / lastScannedOrder.totalRequired) * 100) : 0}%`
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-              );
-            })()}
 
-            {/* ─── 2. Dedicated Individual Book Codes Verification Boxes ──── */}
-            <div>
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center justify-between">
-                <span>Individual Book Codes ({lastScannedOrder.items.length} titles)</span>
-                <span className="text-[11px] text-emerald-400 font-medium">
-                  {lastScannedOrder.totalPending === 0 ? '✓ All Books Verified & Done' : 'Scan book barcode or click mark to verify & dispatch'}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {lastScannedOrder.items.map((item: any, i: number) => {
-                  const isDone = item.dispatchedQuantity >= item.requiredQuantity;
-                  return (
-                    <div
-                      key={item.id || i}
-                      className={`p-3.5 rounded-xl border-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
-                        isDone
-                          ? 'bg-emerald-950/40 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/40'
-                          : 'bg-slate-800/90 border-slate-700 hover:border-slate-600 text-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold shrink-0 ${
-                          isDone ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-slate-700 text-slate-300'
-                        }`}>
-                          <BookOpen size={18} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-white text-base">{item.bookCode}</span>
-                            <span className="text-xs text-slate-400 font-mono">Qty: {item.dispatchedQuantity}/{item.requiredQuantity}</span>
-                          </div>
-                          <div className="text-white text-sm sm:text-base font-bold mt-0.5">{item.bookName}</div>
-                        </div>
+                {/* 3. SCAN OR TYPE PHYSICAL BOOK CODE INPUT (Under Student Card) */}
+                <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-3.5 shadow-inner">
+                  <form onSubmit={(e) => { e.preventDefault(); if (innerBookCode.trim()) { handleGlobalScan(innerBookCode); setInnerBookCode(''); } }} className="space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor="inner-book-code-input"
+                        className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5"
+                      >
+                        <Barcode className="w-4 h-4 text-red-600" />
+                        Scan or Type Physical Book Code
+                      </label>
+                      {lastScannedOrder.totalPending > 0 && (
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {lastScannedOrder.totalPending} book{lastScannedOrder.totalPending > 1 ? 's' : ''} left
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="relative flex items-center">
+                      <input
+                        id="inner-book-code-input"
+                        ref={innerInputRef}
+                        type="text"
+                        value={innerBookCode}
+                        onChange={(e) => setInnerBookCode(e.target.value.toUpperCase())}
+                        placeholder={
+                          lastScannedOrder.totalPending === 0
+                            ? 'All books for this order have been dispatched!'
+                            : 'TYPE BOOK CODE (E.G. QB101) & PRESS ENTER'
+                        }
+                        disabled={isScanning || lastScannedOrder.totalPending === 0}
+                        className={`w-full pl-4 pr-24 py-2.5 rounded-xl font-mono font-bold text-sm sm:text-base uppercase tracking-wide transition-all ${
+                          lastScannedOrder.totalPending === 0
+                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                            : 'bg-white border-2 border-red-500/70 text-slate-900 shadow-sm focus:outline-none focus:ring-4 focus:ring-red-100 focus:border-red-600'
+                        }`}
+                      />
+
+                      <div className="absolute right-2 flex items-center gap-1.5">
+                        <Button
+                          type="submit"
+                          variant="primary"
+                          size="sm"
+                          disabled={!innerBookCode.trim() || isScanning || lastScannedOrder.totalPending === 0}
+                          isLoading={isScanning}
+                        >
+                          Verify
+                        </Button>
                       </div>
+                    </div>
 
-                      {/* Verification Mark / Box for Book */}
-                      <div className="shrink-0 flex items-center gap-2">
-                        {isDone ? (
-                          <div className="flex items-center gap-2 bg-emerald-500 text-slate-950 px-3.5 py-2 rounded-lg font-bold text-xs shadow-xs">
-                            <CheckCircle2 size={16} className="text-slate-950" />
-                            <span>Code Verified & Done ({item.dispatchedQuantity}/{item.requiredQuantity})</span>
+                    <p className="text-[11px] text-slate-500 flex items-center justify-between">
+                      <span>Physical barcode gun scanner & keyboard ready.</span>
+                      <span>Press <kbd className="bg-white border border-slate-300 rounded px-1 text-[10px] font-mono">Enter ↵</kbd></span>
+                    </p>
+                  </form>
+
+                  {/* Quick-fill chips for pending products & books */}
+                  {lastScannedOrder.totalPending > 0 && (
+                    <div className="mt-2.5 pt-2.5 border-t border-slate-200/80 space-y-2 text-xs">
+                      {/* Product Code chips if order contains multiple products */}
+                      {(() => {
+                        const pendingProducts = Array.from(
+                          new Set(
+                            lastScannedOrder.items
+                              .filter((item: any) => (item.requiredQuantity - item.dispatchedQuantity) > 0 && Boolean(item.productCode && item.productCode.trim()))
+                              .map((item: any) => (item.productCode || '').trim().toUpperCase())
+                          )
+                        );
+                        if (pendingProducts.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-purple-50/80 border border-purple-200">
+                            <span className="text-purple-800 font-bold text-[11px] mr-1 flex items-center gap-1">
+                              <span>📦 Products ({pendingProducts.length}):</span>
+                            </span>
+                            {pendingProducts.map((pCode: any) => (
+                              <button
+                                key={pCode}
+                                type="button"
+                                onClick={() => handleGlobalScan(pCode)}
+                                className="font-mono text-[11px] font-black bg-white text-purple-800 border-2 border-purple-300 hover:bg-purple-100 hover:border-purple-500 px-2.5 py-0.5 rounded-lg transition-all flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95"
+                                title={`Click to verify Product Code ${pCode}`}
+                              >
+                                <span>📦 {pCode}</span>
+                              </button>
+                            ))}
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => handleGlobalScan(item.bookCode)}
-                            disabled={isScanning}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-red-600 text-slate-200 hover:text-white border border-slate-600 hover:border-red-400 px-3.5 py-2 rounded-lg font-bold text-xs transition-all hover:scale-102 cursor-pointer group disabled:opacity-50"
-                            title={`Scan barcode or click mark to verify & dispatch ${item.bookCode}`}
-                          >
-                            <div className="w-4 h-4 rounded border-2 border-slate-400 group-hover:border-white flex items-center justify-center bg-slate-900/50">
-                              {/* Unchecked square box */}
+                        );
+                      })()}
+
+                      {/* Individual Book chips */}
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-slate-500 text-[11px] mr-1">Expected:</span>
+                        {lastScannedOrder.items
+                          .filter((item: any) => (item.requiredQuantity - item.dispatchedQuantity) > 0)
+                          .map((item: any) => (
+                            <button
+                              key={item.id || item.bookCode}
+                              type="button"
+                              onClick={() => handleGlobalScan(item.bookCode)}
+                              className="font-mono text-[11px] font-bold bg-white text-red-700 border border-red-200 hover:bg-red-50 hover:border-red-400 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
+                              title={`Click to verify ${item.bookCode}`}
+                            >
+                              <span>{item.bookCode}</span>
+                              <span className="text-slate-400 font-normal">({item.requiredQuantity - item.dispatchedQuantity})</span>
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ─── RIGHT HALF: BOOKS CHECKLIST FOR THIS STUDENT ─── */}
+              <div className="space-y-3">
+                <div className="bg-white border-2 border-slate-200/90 rounded-2xl p-4 shadow-sm">
+                  <div className="flex items-center justify-between text-xs text-slate-700 pb-2.5 mb-2.5 border-b border-slate-100 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <PackageCheck className="w-4 h-4 text-[#DE3744]" />
+                      <span>Books In This Order ({lastScannedOrder.items.length} titles)</span>
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-medium">Quantity Breakdown</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {lastScannedOrder.items.map((item: any, idx: number) => {
+                      const pendingQty = Math.max(0, item.requiredQuantity - item.dispatchedQuantity);
+                      const isItemComplete = pendingQty === 0;
+
+                      return (
+                        <div
+                          key={item.id || idx}
+                          className={`p-3 rounded-xl border transition-all ${
+                            isItemComplete
+                              ? 'bg-emerald-50/70 border-emerald-300 ring-1 ring-emerald-200'
+                              : 'bg-white border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2.5">
+                            <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              {/* Serial Number Badge */}
+                              <div
+                                className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 mt-0.5 ${
+                                  isItemComplete
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-red-50 text-red-600 border border-red-200'
+                                }`}
+                              >
+                                {idx + 1}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <span
+                                    className={`font-mono text-xs font-black px-2 py-0.5 rounded border ${
+                                      isItemComplete
+                                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                        : 'bg-slate-100 text-slate-800 border-slate-300'
+                                    }`}
+                                  >
+                                    {item.bookCode}
+                                  </span>
+
+                                  {item.productCode && (
+                                    <span className="text-[10px] font-mono font-bold bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200 flex items-center gap-0.5">
+                                      <span>📦 {item.productCode}</span>
+                                    </span>
+                                  )}
+
+                                  <span className="text-xs font-bold text-slate-900 truncate">
+                                    {item.bookName}
+                                  </span>
+                                </div>
+
+                                <div className="text-[11px] text-slate-400 mt-0.5">
+                                  {item.requiredQuantity > 1 ? `Multi-copy order (${item.requiredQuantity} copies)` : 'Single copy order'}
+                                </div>
+                              </div>
                             </div>
-                            <span>Scan or Click Mark to Verify ({item.dispatchedQuantity}/{item.requiredQuantity})</span>
+
+                            {/* Quantity Counter & Status Badge */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-mono text-xs font-bold text-slate-700">
+                                <span className={isItemComplete ? 'text-emerald-700 font-black' : 'text-slate-900'}>
+                                  {item.dispatchedQuantity}
+                                </span>{' '}
+                                / {item.requiredQuantity}
+                              </span>
+
+                              {isItemComplete ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Dispatched</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleGlobalScan(item.bookCode)}
+                                  className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 cursor-pointer transition-colors"
+                                  title={`Click to verify ${item.bookCode}`}
+                                >
+                                  <span>Pending</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Manual Finish & Quick Dispatch Actions */}
+                  {lastScannedOrder.totalPending > 0 && (
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[11px] text-slate-500">
+                        ⚡ Scan gun ya keyboard se book code enter karein.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {lastScannedOrder.totalDispatched > 0 && (
+                          <button
+                            onClick={handleManualFinish}
+                            disabled={isScanning}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                            title="Dispatch only scanned books, keep remaining as Pending"
+                          >
+                            <CheckCircle2 size={13} />
+                            Finish Partial Order ({lastScannedOrder.totalDispatched}/{lastScannedOrder.totalRequired})
                           </button>
                         )}
+                        <button
+                          onClick={handleQuickDispatchAll}
+                          disabled={isScanning}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-500 text-white flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+                          title="Quickly dispatch all remaining books for this order without scanning"
+                        >
+                          <Zap size={13} />
+                          Quick Dispatch All Books
+                        </button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-
-              {/* Action buttons for manual or quick dispatch */}
-              {lastScannedOrder.totalPending > 0 && (
-                <div className="mt-4 pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-xs text-slate-400">
-                    ⚡ Aim scanner gun at <strong>Product Barcode</strong> or <strong>Book Barcodes</strong> to verify each item.
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {lastScannedOrder.totalDispatched > 0 && (
-                      <button
-                        onClick={handleManualFinish}
-                        disabled={isScanning}
-                        className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-500 text-white flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                        title="Dispatch only scanned books, keep remaining as Pending"
-                      >
-                        <CheckCircle2 size={14} />
-                        Finish Partial Order ({lastScannedOrder.totalDispatched}/{lastScannedOrder.totalRequired})
-                      </button>
-                    )}
-                    <button
-                      onClick={handleQuickDispatchAll}
-                      disabled={isScanning}
-                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-500 text-white flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
-                      title="Quickly dispatch all remaining books for this order without scanning"
-                    >
-                      <Zap size={14} />
-                      Quick Dispatch All Books
-                    </button>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
         )}
