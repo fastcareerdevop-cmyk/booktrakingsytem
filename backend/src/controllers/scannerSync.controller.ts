@@ -42,14 +42,10 @@ export async function pushScan(req: Request, res: Response) {
 
     const cleanCode = String(code).trim().toUpperCase();
     const sessionData = getOrCreateSession(session);
-    sessionData.queue.push(cleanCode);
-
-    // Broadcast scan to ANY desktop station actively polling within the last 45 seconds!
-    const now = Date.now();
-    for (const [sId, sData] of sessions.entries()) {
-      if (sId !== session && (now - sData.lastActivity < 45 * 1000)) {
-        sData.queue.push(cleanCode);
-      }
+    
+    // Deduplicate: Don't push if the same code is already queued at the end
+    if (sessionData.queue.length === 0 || sessionData.queue[sessionData.queue.length - 1] !== cleanCode) {
+      sessionData.queue.push(cleanCode);
     }
 
     return successResponse(res, `Code "${cleanCode}" transmitted to desktop station`, {
@@ -58,6 +54,24 @@ export async function pushScan(req: Request, res: Response) {
     });
   } catch (error: any) {
     return errorResponse(res, error.message || 'Failed to push scan', 'PUSH_ERROR', 500);
+  }
+}
+
+/**
+ * Clear all queued scans for a session
+ */
+export async function clearQueue(req: Request, res: Response) {
+  try {
+    const session = String(req.query.session || req.body?.session || '').trim();
+    if (session) {
+      const sessionData = sessions.get(session);
+      if (sessionData) {
+        sessionData.queue = [];
+      }
+    }
+    return successResponse(res, 'Queue cleared');
+  } catch (error: any) {
+    return errorResponse(res, error.message || 'Failed to clear queue', 'CLEAR_ERROR', 500);
   }
 }
 

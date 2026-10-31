@@ -65,6 +65,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   const trackingInputRef = useRef<HTMLInputElement>(null);
   const [matchCountdown, setMatchCountdown] = useState(10);
   const matchTimerRef = useRef<any>(null);
+  const recentlyCompletedCodesRef = useRef<Map<string, number>>(new Map());
 
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'warning' | 'completed' | null;
@@ -136,6 +137,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                     (cleanExpectedOrder && cleanScanned === cleanExpectedOrder);
 
     if (isMatch) {
+      if (trackingMatchStatus === 'matched') return;
+
       if (autoCloseTimerRef.current) {
         clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
@@ -147,6 +150,13 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       setTrackingMatchStatus('matched');
       setTrackingErrorMessage('');
       setMatchCountdown(10);
+
+      // Register completed order codes
+      const now = Date.now();
+      if (activeOrder.trackingId) recentlyCompletedCodesRef.current.set(activeOrder.trackingId, now);
+      if (activeOrder.orderCode) recentlyCompletedCodesRef.current.set(activeOrder.orderCode, now);
+      if (scanned) recentlyCompletedCodesRef.current.set(scanned, now);
+
       if (soundEnabled) {
         playSuccessChime();
         speakVoiceAnnouncement('Tracking ID matched successfully! Parcel verified. Order complete.');
@@ -236,6 +246,32 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   const handleScanOrSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const code = enteredCode.trim().toUpperCase();
+
+    // 1. If currently in 10s celebration countdown after tracking ID match, IGNORE ALL SCANS!
+    if (trackingMatchStatus === 'matched') {
+      return;
+    }
+
+    // 2. If this code belongs to an order that was recently completed, SILENTLY IGNORE IT!
+    const now = Date.now();
+    for (const [c, timestamp] of recentlyCompletedCodesRef.current.entries()) {
+      if (now - timestamp > 60000) {
+        recentlyCompletedCodesRef.current.delete(c);
+      }
+    }
+    const cleanNoPunct = code.replace(/[\s\-_]/g, '');
+    let isRecentlyDone = false;
+    for (const [compCode] of recentlyCompletedCodesRef.current.entries()) {
+      if (compCode && compCode.replace(/[\s\-_]/g, '') === cleanNoPunct) {
+        isRecentlyDone = true;
+        break;
+      }
+    }
+    if (isRecentlyDone) {
+      console.log('Silently suppressing re-scan of completed order:', code);
+      setEnteredCode('');
+      return;
+    }
 
     // 🔒 If Confirmation / Tracking ID overlay is open, ALL scans are for Tracking verification!
     if (showPaytmSuccessRef.current || showPaytmSuccess) {
@@ -399,9 +435,17 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         }, 100);
       }
     } catch (err: any) {
+      const errCode = err.response?.data?.code;
       const serverMsg =
         err.response?.data?.message ||
         `Warning: Book code "${code}" does not match any pending books for this student order.`;
+
+      // If order is already completed, do NOT sound error tone or voice! Silently suppress!
+      if (errCode === 'ORDER_ALREADY_COMPLETED') {
+        recentlyCompletedCodesRef.current.set(code, Date.now());
+        setFeedback({ type: null, message: '' });
+        return;
+      }
 
       if (soundEnabled) {
         playErrorTone();

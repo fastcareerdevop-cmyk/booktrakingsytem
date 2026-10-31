@@ -117,6 +117,7 @@ export const OutgoingOrdersPage: React.FC = () => {
   const trackingInputRef = useRef<HTMLInputElement>(null);
   const [matchCountdown, setMatchCountdown] = useState(10);
   const matchTimerRef = useRef<any>(null);
+  const recentlyCompletedCodesRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     showPaytmSuccessRef.current = showPaytmSuccess;
@@ -184,6 +185,8 @@ export const OutgoingOrdersPage: React.FC = () => {
                     (cleanExpectedOrder && cleanScanned === cleanExpectedOrder);
 
     if (isMatch) {
+      if (trackingMatchStatus === 'matched') return; // already in celebration countdown, ignore
+
       if (autoCloseTimerRef.current) {
         clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
@@ -195,6 +198,18 @@ export const OutgoingOrdersPage: React.FC = () => {
       setTrackingMatchStatus('matched');
       setTrackingErrorMessage('');
       setMatchCountdown(10);
+
+      // Register all codes of this completed order so any subsequent re-scan is ignored!
+      const now = Date.now();
+      if (expTrack) recentlyCompletedCodesRef.current.set(expTrack, now);
+      if (expOrd) recentlyCompletedCodesRef.current.set(expOrd, now);
+      if (scanned) recentlyCompletedCodesRef.current.set(scanned, now);
+      if (lastScannedOrder?.orderCode) recentlyCompletedCodesRef.current.set(lastScannedOrder.orderCode, now);
+      if (lastScannedOrder?.trackingId) recentlyCompletedCodesRef.current.set(lastScannedOrder.trackingId, now);
+
+      // Flush mobile scanner sync queue so duplicate scans of this parcel are flushed
+      api.post('/scanner-sync/clear', { session: stationSessionId }).catch(() => {});
+
       if (soundEnabled) {
         playSuccessChime();
         speakVoiceAnnouncement('Tracking ID matched successfully! Parcel verified. Order complete.');
@@ -290,6 +305,31 @@ export const OutgoingOrdersPage: React.FC = () => {
   const handleGlobalScan = useCallback(async (code: string) => {
     if (!code.trim() || isScanning || isScanningRef.current) return;
     const cleanCode = code.trim().toUpperCase();
+
+    // 1. If currently in 10s countdown after tracking ID match, IGNORE ALL SCANS!
+    if (trackingMatchStatus === 'matched') {
+      return;
+    }
+
+    // 2. If this code belongs to an order that was recently completed, SILENTLY IGNORE IT!
+    const now = Date.now();
+    for (const [c, timestamp] of recentlyCompletedCodesRef.current.entries()) {
+      if (now - timestamp > 60000) {
+        recentlyCompletedCodesRef.current.delete(c);
+      }
+    }
+    const cleanNoPunct = cleanCode.replace(/[\s\-_]/g, '');
+    let isRecentlyDone = false;
+    for (const [compCode] of recentlyCompletedCodesRef.current.entries()) {
+      if (compCode && compCode.replace(/[\s\-_]/g, '') === cleanNoPunct) {
+        isRecentlyDone = true;
+        break;
+      }
+    }
+    if (isRecentlyDone) {
+      console.log('Silently suppressing re-scan of recently completed order:', cleanCode);
+      return;
+    }
 
     // 🔒 If Confirmation / Tracking ID overlay is open, ALL scans are for Tracking verification!
     // Never close screen on wrong tracking ID; screen stays open until correct scan!
@@ -444,8 +484,17 @@ export const OutgoingOrdersPage: React.FC = () => {
         }
       }
     } catch (err: any) {
-      if (soundEnabled) playErrorTone();
+      const errCode = err.response?.data?.code;
       const serverErrMsg = err.response?.data?.message || `Code "${cleanCode}" could not be verified or has no pending books.`;
+
+      // If order is already completed, do NOT sound error tone or voice! Silently suppress!
+      if (errCode === 'ORDER_ALREADY_COMPLETED') {
+        recentlyCompletedCodesRef.current.set(cleanCode, Date.now());
+        setScanResult({ type: null, message: '' });
+        return;
+      }
+
+      if (soundEnabled) playErrorTone();
       setScanResult({
         type: 'error',
         message: serverErrMsg,
