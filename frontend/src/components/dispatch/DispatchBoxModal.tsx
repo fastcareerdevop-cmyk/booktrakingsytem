@@ -63,6 +63,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   const [trackingMatchStatus, setTrackingMatchStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
   const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
   const trackingInputRef = useRef<HTMLInputElement>(null);
+  const [matchCountdown, setMatchCountdown] = useState(10);
+  const matchTimerRef = useRef<any>(null);
 
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'warning' | 'completed' | null;
@@ -96,6 +98,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   useEffect(() => {
     return () => {
       if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
+      if (matchTimerRef.current) clearInterval(matchTimerRef.current);
     };
   }, []);
 
@@ -104,10 +107,15 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       clearTimeout(autoCloseTimerRef.current);
       autoCloseTimerRef.current = null;
     }
+    if (matchTimerRef.current) {
+      clearInterval(matchTimerRef.current);
+      matchTimerRef.current = null;
+    }
     setShowPaytmSuccess(false);
     setTrackingInput('');
     setTrackingMatchStatus('idle');
     setTrackingErrorMessage('');
+    setMatchCountdown(10);
 
     if (hasNextOrder && onProceedNextOrder) {
       onProceedNextOrder();
@@ -132,15 +140,30 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
       }
+      if (matchTimerRef.current) {
+        clearInterval(matchTimerRef.current);
+        matchTimerRef.current = null;
+      }
       setTrackingMatchStatus('matched');
       setTrackingErrorMessage('');
+      setMatchCountdown(10);
       if (soundEnabled) {
         playSuccessChime();
-        speakVoiceAnnouncement('Tracking ID matched. Parcel verified.');
+        speakVoiceAnnouncement('Tracking ID matched successfully! Parcel verified. Order complete.');
       }
-      setTimeout(() => {
-        handleDismissSuccessOverlay();
-      }, 1200);
+
+      // Show screen for exactly 10 seconds before automatically moving to next order
+      matchTimerRef.current = setInterval(() => {
+        setMatchCountdown((prev) => {
+          if (prev <= 1) {
+            if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+            matchTimerRef.current = null;
+            handleDismissSuccessOverlay();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     } else {
       // ❌ Mismatch: STAY ON SCREEN until correct ID is scanned!
       if (autoCloseTimerRef.current) {
@@ -482,9 +505,23 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
               </div>
 
               {trackingMatchStatus === 'matched' ? (
-                <div className="p-2.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-900 flex items-center justify-center gap-2 animate-pulse">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-xs font-bold">✓ Tracking ID Matched! Moving to next order...</span>
+                <div className="p-3.5 rounded-2xl bg-emerald-50 border-2 border-emerald-500 text-emerald-950 space-y-2 shadow-sm animate-in fade-in">
+                  <div className="flex items-center gap-2 text-emerald-700 font-black text-sm">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span>Tracking ID Matched Successfully!</span>
+                  </div>
+                  <div className="text-xs text-emerald-800 font-medium">
+                    Parcel verified & confirmed. Order is fully complete.
+                  </div>
+                  {activeOrder.trackingId && (
+                    <div className="font-mono text-xs font-bold bg-white px-2.5 py-1 rounded-lg border border-emerald-200 text-emerald-800 inline-block">
+                      Tracking ID: {activeOrder.trackingId}
+                    </div>
+                  )}
+                  <div className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1.5 pt-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span>Next order will load automatically in <strong className="font-mono text-emerald-900 text-xs font-black">{matchCountdown}s</strong></span>
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleTrackingSubmit} className="space-y-1.5">
@@ -538,9 +575,9 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                     <span>Waiting for match...</span>
                   </span>
                 ) : trackingMatchStatus === 'matched' ? (
-                  <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                    <span>Verified ✓</span>
+                  <span className="text-emerald-700 font-bold flex items-center gap-1.5 text-xs">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span>Next in: <strong className="font-mono text-emerald-900 font-black">{matchCountdown}s</strong></span>
                   </span>
                 ) : (
                   <span className="text-slate-500 text-[11px] font-semibold flex items-center gap-1.5">
@@ -558,7 +595,13 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                     : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                 }`}
               >
-                <span>{trackingMatchStatus === 'mismatch' ? 'Skip & Next (छोड़ें)' : (hasNextOrder ? 'अगला आर्डर (Skip)' : 'Done & Close')}</span>
+                <span>
+                  {trackingMatchStatus === 'mismatch'
+                    ? 'Skip & Next (छोड़ें)'
+                    : trackingMatchStatus === 'matched'
+                    ? (hasNextOrder ? `Next Order Now (${matchCountdown}s)` : `Done & Close (${matchCountdown}s)`)
+                    : (hasNextOrder ? 'अगला आर्डर (Skip)' : 'Done & Close')}
+                </span>
                 <ArrowRight size={13} />
               </button>
             </div>
