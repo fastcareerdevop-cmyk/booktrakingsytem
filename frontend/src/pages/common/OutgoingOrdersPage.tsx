@@ -115,7 +115,7 @@ export const OutgoingOrdersPage: React.FC = () => {
   const [trackingMatchStatus, setTrackingMatchStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
   const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
   const trackingInputRef = useRef<HTMLInputElement>(null);
-  const [matchCountdown, setMatchCountdown] = useState(10);
+  const [matchCountdown, setMatchCountdown] = useState(5);
   const matchTimerRef = useRef<any>(null);
   const recentlyCompletedCodesRef = useRef<Map<string, number>>(new Map());
 
@@ -166,7 +166,7 @@ export const OutgoingOrdersPage: React.FC = () => {
     setTrackingInput('');
     setTrackingMatchStatus('idle');
     setTrackingErrorMessage('');
-    setMatchCountdown(10);
+    setMatchCountdown(5);
     lastScannedOrderRef.current = null;
     setLastScannedOrder(null);
     setScanResult({ type: null, message: '' });
@@ -208,7 +208,7 @@ export const OutgoingOrdersPage: React.FC = () => {
       }
       setTrackingMatchStatus('matched');
       setTrackingErrorMessage('');
-      setMatchCountdown(10);
+      setMatchCountdown(5);
 
       // Register all codes of this completed order so any subsequent re-scan is ignored!
       const now = Date.now();
@@ -226,7 +226,7 @@ export const OutgoingOrdersPage: React.FC = () => {
         speakVoiceAnnouncement('Tracking ID matched successfully! Parcel verified. Order complete.');
       }
 
-      // Show screen for exactly 10 seconds before automatically moving to next order
+      // Show screen for exactly 5 seconds before automatically moving to next order
       matchTimerRef.current = setInterval(() => {
         setMatchCountdown((prev) => {
           if (prev <= 1) {
@@ -273,6 +273,13 @@ export const OutgoingOrdersPage: React.FC = () => {
     }, 120);
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // If user presses Escape key while overlay is open, immediately skip & proceed to next order!
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleDismissSuccessOverlay();
+        return;
+      }
+
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
@@ -1065,7 +1072,7 @@ export const OutgoingOrdersPage: React.FC = () => {
                     : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                 }`}
               >
-                <span>{trackingMatchStatus === 'mismatch' ? 'Skip & Next (छोड़ें)' : trackingMatchStatus === 'matched' ? `Next Order Now (${matchCountdown}s)` : 'अगला आर्डर (Skip)'}</span>
+                <span>{trackingMatchStatus === 'mismatch' ? 'Skip & Next (Esc)' : trackingMatchStatus === 'matched' ? `Next Order Now (${matchCountdown}s)` : 'अगला आर्डर (Esc / Skip)'}</span>
                 <ArrowRight size={13} />
               </button>
             </div>

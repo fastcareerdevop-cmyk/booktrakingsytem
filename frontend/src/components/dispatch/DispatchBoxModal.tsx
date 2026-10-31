@@ -63,7 +63,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   const [trackingMatchStatus, setTrackingMatchStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
   const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
   const trackingInputRef = useRef<HTMLInputElement>(null);
-  const [matchCountdown, setMatchCountdown] = useState(10);
+  const [matchCountdown, setMatchCountdown] = useState(5);
   const matchTimerRef = useRef<any>(null);
   const recentlyCompletedCodesRef = useRef<Map<string, number>>(new Map());
 
@@ -120,7 +120,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     setTrackingInput('');
     setTrackingMatchStatus('idle');
     setTrackingErrorMessage('');
-    setMatchCountdown(10);
+    setMatchCountdown(5);
 
     if (hasNextOrder && onProceedNextOrder) {
       onProceedNextOrder();
@@ -153,7 +153,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       }
       setTrackingMatchStatus('matched');
       setTrackingErrorMessage('');
-      setMatchCountdown(10);
+      setMatchCountdown(5);
 
       // Register completed order codes
       const now = Date.now();
@@ -166,7 +166,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         speakVoiceAnnouncement('Tracking ID matched successfully! Parcel verified. Order complete.');
       }
 
-      // Show screen for exactly 10 seconds before automatically moving to next order
+      // Show screen for exactly 5 seconds before automatically moving to next order
       matchTimerRef.current = setInterval(() => {
         setMatchCountdown((prev) => {
           if (prev <= 1) {
@@ -213,6 +213,13 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     }, 120);
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // If user presses Escape key while overlay is open, immediately skip & proceed to next order!
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleDismissSuccessOverlay();
+        return;
+      }
+
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
@@ -645,10 +652,10 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
               >
                 <span>
                   {trackingMatchStatus === 'mismatch'
-                    ? 'Skip & Next (छोड़ें)'
+                    ? 'Skip & Next (Esc)'
                     : trackingMatchStatus === 'matched'
                     ? (hasNextOrder ? `Next Order Now (${matchCountdown}s)` : `Done & Close (${matchCountdown}s)`)
-                    : (hasNextOrder ? 'अगला आर्डर (Skip)' : 'Done & Close')}
+                    : (hasNextOrder ? 'अगला आर्डर (Esc / Skip)' : 'Done & Close (Esc)')}
                 </span>
                 <ArrowRight size={13} />
               </button>
