@@ -50,8 +50,13 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
 
   // Paytm-style Circular Checkmark ("RIGHT KA CLICK") state
   const [showPaytmSuccess, setShowPaytmSuccess] = useState(false);
+  const showPaytmSuccessRef = useRef(false);
   const autoCloseTimerRef = useRef<any>(null);
   const isVerifyingRef = useRef(false);
+
+  useEffect(() => {
+    showPaytmSuccessRef.current = showPaytmSuccess;
+  }, [showPaytmSuccess]);
 
   // Tracking ID Match State (Optional)
   const [trackingInput, setTrackingInput] = useState('');
@@ -111,9 +116,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     }
   };
 
-  const handleTrackingSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const scanned = trackingInput.trim().toUpperCase();
+  const handleVerifyTrackingCode = (scannedRaw: string) => {
+    const scanned = scannedRaw.trim().toUpperCase();
     if (!scanned || !activeOrder) return;
 
     const cleanScanned = scanned.replace(/[\s\-_]/g, '');
@@ -138,31 +142,53 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         handleDismissSuccessOverlay();
       }, 1200);
     } else {
+      // ❌ Mismatch: STAY ON SCREEN until correct ID is scanned!
       if (autoCloseTimerRef.current) {
         clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
       }
+      setShowPaytmSuccess(true);
+      showPaytmSuccessRef.current = true;
       setTrackingMatchStatus('mismatch');
-      setTrackingErrorMessage(`Scanned: "${scanned}" | Expected: "${activeOrder.trackingId || activeOrder.orderCode}"`);
+      setTrackingErrorMessage(`Scanned: "${scanned}" | Sahi Tracking ID: "${activeOrder.trackingId || activeOrder.orderCode || 'N/A'}"`);
       if (soundEnabled) {
         playErrorTone();
-        speakErrorMessage('Tracking ID does not match this parcel. Please scan the correct parcel or click skip.');
+        speakErrorMessage('Galat tracking ID. Kripya sahi parcel scan karein.');
       }
       setTrackingInput('');
       setTimeout(() => {
         trackingInputRef.current?.focus();
-      }, 100);
+      }, 50);
     }
   };
 
-  // Focus tracking input automatically when success overlay appears
+  const handleTrackingSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    handleVerifyTrackingCode(trackingInput);
+  };
+
+  // Focus tracking input automatically when success overlay appears & redirect typing to it
   useEffect(() => {
-    if (showPaytmSuccess) {
-      const timer = setTimeout(() => {
+    if (!showPaytmSuccess) return;
+
+    const timer = setTimeout(() => {
+      trackingInputRef.current?.focus();
+    }, 120);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key.length === 1 || e.key === 'Enter') {
         trackingInputRef.current?.focus();
-      }, 150);
-      return () => clearTimeout(timer);
-    }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [showPaytmSuccess]);
 
   // Focus input automatically whenever modal opens or an item is scanned
@@ -187,6 +213,13 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   const handleScanOrSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const code = enteredCode.trim().toUpperCase();
+
+    // 🔒 If Confirmation / Tracking ID overlay is open, ALL scans are for Tracking verification!
+    if (showPaytmSuccessRef.current || showPaytmSuccess) {
+      handleVerifyTrackingCode(code);
+      setEnteredCode('');
+      return;
+    }
 
     if (!code || isVerifying || isVerifyingRef.current || isOrderFullyCompleted) {
       if (isOrderFullyCompleted && code) {
@@ -461,7 +494,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                       type="text"
                       value={trackingInput}
                       onChange={(e) => setTrackingInput(e.target.value.toUpperCase())}
-                      placeholder="Scan or type Tracking ID from parcel..."
+                      placeholder={trackingMatchStatus === 'mismatch' ? "⚠️ Sahi Tracking ID scan karein..." : "Scan or type Tracking ID from parcel..."}
                       className={`w-full px-3 py-2 pr-16 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all ${
                         trackingMatchStatus === 'mismatch'
                           ? 'bg-rose-50 border-2 border-rose-500 text-rose-900 focus:ring-2 focus:ring-rose-300'
@@ -479,11 +512,16 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                   </div>
 
                   {trackingMatchStatus === 'mismatch' && (
-                    <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <div>{trackingErrorMessage}</div>
-                        <div className="text-[10px] text-rose-600 mt-0.5">Sahi tracking ID scan karein ya Skip button dabayein.</div>
+                    <div className="p-3 rounded-xl bg-rose-50 border-2 border-rose-500 text-rose-900 text-xs font-medium space-y-1 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-rose-700 font-bold text-xs">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>⚠️ Galat Tracking ID! / Tracking ID Mismatch</span>
+                      </div>
+                      <div className="font-mono text-[11px] bg-white px-2 py-1 rounded border border-rose-200 text-rose-800 break-all font-semibold">
+                        {trackingErrorMessage}
+                      </div>
+                      <div className="text-[11px] text-rose-700 font-semibold pt-0.5">
+                        Kripya sahi parcel ka barcode scan karein. Yeh screen sahi barcode scan hone tak khuli rahegi.
                       </div>
                     </div>
                   )}

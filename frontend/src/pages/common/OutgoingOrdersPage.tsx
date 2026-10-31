@@ -105,13 +105,28 @@ export const OutgoingOrdersPage: React.FC = () => {
   const innerInputRef = useRef<HTMLInputElement>(null);
 
   const [showPaytmSuccess, setShowPaytmSuccess] = useState(false);
+  const showPaytmSuccessRef = useRef(false);
   const [completedStudentName, setCompletedStudentName] = useState('');
   const [completedTrackingId, setCompletedTrackingId] = useState('');
+  const completedTrackingIdRef = useRef('');
   const [completedOrderCode, setCompletedOrderCode] = useState('');
+  const completedOrderCodeRef = useRef('');
   const [trackingInput, setTrackingInput] = useState('');
   const [trackingMatchStatus, setTrackingMatchStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
   const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
   const trackingInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    showPaytmSuccessRef.current = showPaytmSuccess;
+  }, [showPaytmSuccess]);
+
+  useEffect(() => {
+    completedTrackingIdRef.current = completedTrackingId;
+  }, [completedTrackingId]);
+
+  useEffect(() => {
+    completedOrderCodeRef.current = completedOrderCode;
+  }, [completedOrderCode]);
 
   const [scanResult, setScanResult] = useState<{
     type: 'success' | 'error' | null;
@@ -147,14 +162,16 @@ export const OutgoingOrdersPage: React.FC = () => {
     setTimeout(() => scanInputRef.current?.focus(), 100);
   };
 
-  const handleTrackingSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const scanned = trackingInput.trim().toUpperCase();
+  const handleVerifyTrackingCode = (scannedRaw: string) => {
+    const scanned = scannedRaw.trim().toUpperCase();
     if (!scanned) return;
 
+    const expTrack = completedTrackingIdRef.current || completedTrackingId || '';
+    const expOrd = completedOrderCodeRef.current || completedOrderCode || '';
+
     const cleanScanned = scanned.replace(/[\s\-_]/g, '');
-    const cleanExpectedTracking = (completedTrackingId || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
-    const cleanExpectedOrder = (completedOrderCode || '').trim().toUpperCase().replace(/[\s\-_]/g, '');
+    const cleanExpectedTracking = expTrack.trim().toUpperCase().replace(/[\s\-_]/g, '');
+    const cleanExpectedOrder = expOrd.trim().toUpperCase().replace(/[\s\-_]/g, '');
 
     const isMatch = (cleanExpectedTracking && cleanScanned === cleanExpectedTracking) ||
                     (cleanExpectedOrder && cleanScanned === cleanExpectedOrder);
@@ -174,32 +191,53 @@ export const OutgoingOrdersPage: React.FC = () => {
         handleDismissSuccessOverlay();
       }, 1200);
     } else {
-      // ❌ Mismatch: FREEZE countdown and hold until correct match or skip!
+      // ❌ Mismatch: STAY ON SCREEN until correct ID is scanned!
       if (autoCloseTimerRef.current) {
         clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
       }
+      setShowPaytmSuccess(true);
+      showPaytmSuccessRef.current = true;
       setTrackingMatchStatus('mismatch');
-      setTrackingErrorMessage(`Scanned: "${scanned}" | Expected: "${completedTrackingId || completedOrderCode}"`);
+      setTrackingErrorMessage(`Scanned: "${scanned}" | Sahi Tracking ID: "${expTrack || expOrd || 'N/A'}"`);
       if (soundEnabled) {
         playErrorTone();
-        speakErrorMessage('Tracking ID mismatch. Please scan the correct parcel or click skip.');
+        speakErrorMessage('Galat tracking ID. Kripya sahi parcel scan karein.');
       }
       setTrackingInput('');
       setTimeout(() => {
         trackingInputRef.current?.focus();
-      }, 100);
+      }, 50);
     }
   };
 
-  // Focus tracking input automatically when success overlay appears
+  const handleTrackingSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    handleVerifyTrackingCode(trackingInput);
+  };
+
+  // Focus tracking input automatically when success overlay appears & redirect typing to it
   useEffect(() => {
-    if (showPaytmSuccess) {
-      const timer = setTimeout(() => {
+    if (!showPaytmSuccess) return;
+
+    const timer = setTimeout(() => {
+      trackingInputRef.current?.focus();
+    }, 120);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key.length === 1 || e.key === 'Enter') {
         trackingInputRef.current?.focus();
-      }, 150);
-      return () => clearTimeout(timer);
-    }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [showPaytmSuccess]);
 
   // Clear auto-close timer on unmount
@@ -214,7 +252,7 @@ export const OutgoingOrdersPage: React.FC = () => {
   // Auto-focus barcode scanner input perpetually for hands-free scanning
   useEffect(() => {
     const focusTimer = setInterval(() => {
-      if (!isDispatchBoxOpen) {
+      if (!isDispatchBoxOpen && !showPaytmSuccess) {
         const activeTag = document.activeElement?.tagName?.toLowerCase();
         if (activeTag !== 'input' && activeTag !== 'textarea' && activeTag !== 'select') {
           scanInputRef.current?.focus();
@@ -222,11 +260,18 @@ export const OutgoingOrdersPage: React.FC = () => {
       }
     }, 1200);
     return () => clearInterval(focusTimer);
-  }, [isDispatchBoxOpen]);
+  }, [isDispatchBoxOpen, showPaytmSuccess]);
 
   const handleGlobalScan = useCallback(async (code: string) => {
     if (!code.trim() || isScanning || isScanningRef.current) return;
     const cleanCode = code.trim().toUpperCase();
+
+    // 🔒 If Confirmation / Tracking ID overlay is open, ALL scans are for Tracking verification!
+    // Never close screen on wrong tracking ID; screen stays open until correct scan!
+    if (showPaytmSuccessRef.current) {
+      handleVerifyTrackingCode(cleanCode);
+      return;
+    }
 
     // Cancel any pending auto-close timers when a new scan starts
     if (autoCloseTimerRef.current) {
@@ -528,7 +573,13 @@ export const OutgoingOrdersPage: React.FC = () => {
         });
 
         setShowPaytmSuccess(true);
+        showPaytmSuccessRef.current = true;
         setCompletedStudentName(updatedOrder?.studentName || '');
+        setCompletedTrackingId(updatedOrder?.trackingId || '');
+        setCompletedOrderCode(updatedOrder?.orderCode || '');
+        setTrackingInput('');
+        setTrackingMatchStatus('idle');
+        setTrackingErrorMessage('');
         if (autoCloseTimerRef.current) {
           clearTimeout(autoCloseTimerRef.current);
           autoCloseTimerRef.current = null;
@@ -848,7 +899,7 @@ export const OutgoingOrdersPage: React.FC = () => {
                       type="text"
                       value={trackingInput}
                       onChange={(e) => setTrackingInput(e.target.value.toUpperCase())}
-                      placeholder="Scan or type Tracking ID from parcel..."
+                      placeholder={trackingMatchStatus === 'mismatch' ? "⚠️ Sahi Tracking ID scan karein..." : "Scan or type Tracking ID from parcel..."}
                       className={`w-full px-3 py-2 pr-16 rounded-xl font-mono text-xs font-bold uppercase tracking-wider transition-all ${
                         trackingMatchStatus === 'mismatch'
                           ? 'bg-rose-50 border-2 border-rose-500 text-rose-900 focus:ring-2 focus:ring-rose-300'
@@ -866,11 +917,16 @@ export const OutgoingOrdersPage: React.FC = () => {
                   </div>
 
                   {trackingMatchStatus === 'mismatch' && (
-                    <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <div>{trackingErrorMessage}</div>
-                        <div className="text-[10px] text-rose-600 mt-0.5">Sahi tracking ID scan karein ya Skip button dabayein.</div>
+                    <div className="p-3 rounded-xl bg-rose-50 border-2 border-rose-500 text-rose-900 text-xs font-medium space-y-1 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-rose-700 font-bold text-xs">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>⚠️ Galat Tracking ID! / Tracking ID Mismatch</span>
+                      </div>
+                      <div className="font-mono text-[11px] bg-white px-2 py-1 rounded border border-rose-200 text-rose-800 break-all font-semibold">
+                        {trackingErrorMessage}
+                      </div>
+                      <div className="text-[11px] text-rose-700 font-semibold pt-0.5">
+                        Kripya sahi parcel ka barcode scan karein. Yeh screen sahi barcode scan hone tak khuli rahegi.
                       </div>
                     </div>
                   )}
