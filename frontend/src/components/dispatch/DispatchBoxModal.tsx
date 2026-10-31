@@ -113,6 +113,10 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       matchTimerRef.current = null;
     }
     setShowPaytmSuccess(false);
+    setEnteredCode('');
+    if (inputRef.current) {
+      inputRef.current.value = '';
+    }
     setTrackingInput('');
     setTrackingMatchStatus('idle');
     setTrackingErrorMessage('');

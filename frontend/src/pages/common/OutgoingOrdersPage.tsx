@@ -159,6 +159,10 @@ export const OutgoingOrdersPage: React.FC = () => {
       window.speechSynthesis.cancel();
     }
     setShowPaytmSuccess(false);
+    setScannerCode('');
+    if (scanInputRef.current) {
+      scanInputRef.current.value = '';
+    }
     setTrackingInput('');
     setTrackingMatchStatus('idle');
     setTrackingErrorMessage('');
@@ -167,11 +171,18 @@ export const OutgoingOrdersPage: React.FC = () => {
     setLastScannedOrder(null);
     setScanResult({ type: null, message: '' });
     fetchOrdersRef.current?.(1);
-    setTimeout(() => scanInputRef.current?.focus(), 100);
+    setTimeout(() => {
+      setScannerCode('');
+      scanInputRef.current?.focus();
+    }, 100);
   };
 
   const handleVerifyTrackingCode = (scannedRaw: string) => {
     const scanned = scannedRaw.trim().toUpperCase();
+    setScannerCode('');
+    if (scanInputRef.current) {
+      scanInputRef.current.value = '';
+    }
     if (!scanned) return;
 
     const expTrack = completedTrackingIdRef.current || completedTrackingId || '';
@@ -305,6 +316,10 @@ export const OutgoingOrdersPage: React.FC = () => {
   const handleGlobalScan = useCallback(async (code: string) => {
     if (!code.trim() || isScanning || isScanningRef.current) return;
     const cleanCode = code.trim().toUpperCase();
+    setScannerCode('');
+    if (scanInputRef.current) {
+      scanInputRef.current.value = '';
+    }
 
     // 1. If currently in 10s countdown after tracking ID match, IGNORE ALL SCANS!
     if (trackingMatchStatus === 'matched') {
@@ -544,7 +559,6 @@ export const OutgoingOrdersPage: React.FC = () => {
           }
           const scans: string[] = payload.scans || payload.codes || [];
           for (const code of scans) {
-            setScannerCode(code);
             handleGlobalScan(code);
           }
         }
