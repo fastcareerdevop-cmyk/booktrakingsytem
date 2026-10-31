@@ -48,11 +48,9 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     Array<{ id: string; code: string; bookName: string; timestamp: string }>
   >([]);
 
-  // Paytm-style Circular Checkmark ("RIGHT KA CLICK") state & countdown
+  // Paytm-style Circular Checkmark ("RIGHT KA CLICK") state
   const [showPaytmSuccess, setShowPaytmSuccess] = useState(false);
-  const [successCountdown, setSuccessCountdown] = useState(15);
   const autoCloseTimerRef = useRef<any>(null);
-  const countdownIntervalRef = useRef<any>(null);
   const isVerifyingRef = useRef(false);
 
   // Tracking ID Match State (Optional)
@@ -86,10 +84,6 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
       }
-      if (countdownIntervalRef.current) {
-        clearInterval(countdownIntervalRef.current);
-        countdownIntervalRef.current = null;
-      }
     }
   }, [order, isOpen]);
 
@@ -97,7 +91,6 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   useEffect(() => {
     return () => {
       if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
   }, []);
 
@@ -105,10 +98,6 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     if (autoCloseTimerRef.current) {
       clearTimeout(autoCloseTimerRef.current);
       autoCloseTimerRef.current = null;
-    }
-    if (countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current);
-      countdownIntervalRef.current = null;
     }
     setShowPaytmSuccess(false);
     setTrackingInput('');
@@ -175,26 +164,6 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
       return () => clearTimeout(timer);
     }
   }, [showPaytmSuccess]);
-
-  // Handle countdown tick for Paytm success overlay (FREEZES on mismatch or matched)
-  useEffect(() => {
-    if (!showPaytmSuccess || trackingMatchStatus === 'mismatch' || trackingMatchStatus === 'matched') return;
-
-    countdownIntervalRef.current = setInterval(() => {
-      setSuccessCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(countdownIntervalRef.current!);
-          handleDismissSuccessOverlay();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    };
-  }, [showPaytmSuccess, trackingMatchStatus]);
 
   // Focus input automatically whenever modal opens or an item is scanned
   useEffect(() => {
@@ -315,11 +284,10 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
 
           // 2. Show the animated Paytm circular checkmark ("RIGHT KA CLICK") overlay
           setShowPaytmSuccess(true);
-          setSuccessCountdown(15);
-          if (autoCloseTimerRef.current) clearTimeout(autoCloseTimerRef.current);
-          autoCloseTimerRef.current = setTimeout(() => {
-            handleDismissSuccessOverlay();
-          }, 15000);
+          if (autoCloseTimerRef.current) {
+            clearTimeout(autoCloseTimerRef.current);
+            autoCloseTimerRef.current = null;
+          }
 
           setFeedback({
             type: 'completed',
@@ -537,10 +505,10 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
                     <span>Verified ✓</span>
                   </span>
                 ) : (
-                  <>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                    <span>Next in: <strong className="font-mono text-emerald-700 font-bold">{successCountdown}s</strong></span>
-                  </>
+                  <span className="text-slate-500 text-[11px] font-semibold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Scan Tracking ID ya Skip karein</span>
+                  </span>
                 )}
               </div>
 

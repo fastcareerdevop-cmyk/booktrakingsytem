@@ -113,7 +113,6 @@ export const OutgoingOrdersPage: React.FC = () => {
   const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
   const trackingInputRef = useRef<HTMLInputElement>(null);
 
-  const [successCountdown, setSuccessCountdown] = useState(15);
   const [scanResult, setScanResult] = useState<{
     type: 'success' | 'error' | null;
     message: string;
@@ -202,21 +201,6 @@ export const OutgoingOrdersPage: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [showPaytmSuccess]);
-
-  // Decrement success overlay countdown every second (15s down to 0) - FREEZES on mismatch or matched!
-  useEffect(() => {
-    if (!showPaytmSuccess || trackingMatchStatus === 'mismatch' || trackingMatchStatus === 'matched') return;
-    const interval = setInterval(() => {
-      setSuccessCountdown((prev) => {
-        if (prev <= 1) {
-          handleDismissSuccessOverlay();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [showPaytmSuccess, trackingMatchStatus]);
 
   // Clear auto-close timer on unmount
   useEffect(() => {
@@ -380,7 +364,6 @@ export const OutgoingOrdersPage: React.FC = () => {
           setTrackingInput('');
           setTrackingMatchStatus('idle');
           setTrackingErrorMessage('');
-          setSuccessCountdown(15);
           setOrders(prev => prev.filter(o => o.id !== updatedOrder.id));
           setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - 1) }));
 
@@ -388,11 +371,6 @@ export const OutgoingOrdersPage: React.FC = () => {
             playOrderCompleteFanfare();
             speakVoiceTwice('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
           }
-
-          // Full 15 seconds duration as requested
-          autoCloseTimerRef.current = setTimeout(() => {
-            handleDismissSuccessOverlay();
-          }, 15000);
         }
       }
     } catch (err: any) {
@@ -551,14 +529,14 @@ export const OutgoingOrdersPage: React.FC = () => {
 
         setShowPaytmSuccess(true);
         setCompletedStudentName(updatedOrder?.studentName || '');
-        setSuccessCountdown(15);
+        if (autoCloseTimerRef.current) {
+          clearTimeout(autoCloseTimerRef.current);
+          autoCloseTimerRef.current = null;
+        }
         if (soundEnabled) {
           playOrderCompleteFanfare();
           speakVoiceTwice('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
         }
-        autoCloseTimerRef.current = setTimeout(() => {
-          handleDismissSuccessOverlay();
-        }, 15000);
       }
     } catch (err: any) {
       const errMsg = err.response?.data?.message || 'Failed to dispatch all items.';
@@ -914,10 +892,10 @@ export const OutgoingOrdersPage: React.FC = () => {
                     <span>Verified ✓</span>
                   </span>
                 ) : (
-                  <>
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                    <span>Next in: <strong className="font-mono text-emerald-700 font-bold">{successCountdown}s</strong></span>
-                  </>
+                  <span className="text-slate-500 text-[11px] font-semibold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Scan Tracking ID ya Skip karein</span>
+                  </span>
                 )}
               </div>
 
