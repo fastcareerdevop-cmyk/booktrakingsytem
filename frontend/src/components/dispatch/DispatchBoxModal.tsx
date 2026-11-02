@@ -255,29 +255,8 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     if (e) e.preventDefault();
     const code = enteredCode.trim().toUpperCase();
 
-    // 1. If currently in 10s celebration countdown after tracking ID match, IGNORE ALL SCANS!
+    // 1. If currently in celebration countdown after tracking ID match, IGNORE ALL SCANS!
     if (trackingMatchStatus === 'matched') {
-      return;
-    }
-
-    // 2. If this code belongs to an order that was recently completed, SILENTLY IGNORE IT!
-    const now = Date.now();
-    for (const [c, timestamp] of recentlyCompletedCodesRef.current.entries()) {
-      if (now - timestamp > 60000) {
-        recentlyCompletedCodesRef.current.delete(c);
-      }
-    }
-    const cleanNoPunct = code.replace(/[\s\-_]/g, '');
-    let isRecentlyDone = false;
-    for (const [compCode] of recentlyCompletedCodesRef.current.entries()) {
-      if (compCode && compCode.replace(/[\s\-_]/g, '') === cleanNoPunct) {
-        isRecentlyDone = true;
-        break;
-      }
-    }
-    if (isRecentlyDone) {
-      console.log('Silently suppressing re-scan of completed order:', code);
-      setEnteredCode('');
       return;
     }
 
@@ -448,16 +427,17 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         err.response?.data?.message ||
         `Warning: Book code "${code}" does not match any pending books for this student order.`;
 
-      // If order is already completed, do NOT sound error tone or voice! Silently suppress!
-      if (errCode === 'ORDER_ALREADY_COMPLETED') {
-        recentlyCompletedCodesRef.current.set(code, Date.now());
-        setFeedback({ type: null, message: '' });
-        return;
-      }
-
       if (soundEnabled) {
         playErrorTone();
-        speakErrorMessage(serverMsg);
+        if (errCode === 'ORDER_ALREADY_COMPLETED') {
+          speakErrorMessage('Warning! Yeh order pehle se hi fully dispatch ho chuka hai.');
+        } else if (errCode === 'ORDER_NOT_FOUND') {
+          speakErrorMessage('Warning! Galat student code. Order nahi mila.');
+        } else if (errCode === 'BOOK_CODE_MISMATCH') {
+          speakErrorMessage('Warning! Book code does not match this order.');
+        } else {
+          speakErrorMessage(serverMsg);
+        }
       }
 
       setFeedback({

@@ -162,8 +162,8 @@ export function speakVoiceAnnouncement(text: string, onEnd?: () => void) {
   try {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       const now = Date.now();
-      // Deduplicate rapid duplicate calls of the same message within 2.5 seconds
-      if (text === lastSpokenText && now - lastSpokenTimestamp < 2500) {
+      // Deduplicate rapid duplicate calls of the exact same message within 1 second
+      if (text === lastSpokenText && now - lastSpokenTimestamp < 1000) {
         onEnd?.();
         return;
       }

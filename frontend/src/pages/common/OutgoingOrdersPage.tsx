@@ -346,28 +346,8 @@ export const OutgoingOrdersPage: React.FC = () => {
       scanInputRef.current.value = '';
     }
 
-    // 1. If currently in 10s countdown after tracking ID match, IGNORE ALL SCANS!
+    // 1. If currently in 5s celebration countdown after tracking ID match, IGNORE ALL SCANS!
     if (trackingMatchStatus === 'matched') {
-      return;
-    }
-
-    // 2. If this code belongs to an order that was recently completed, SILENTLY IGNORE IT!
-    const now = Date.now();
-    for (const [c, timestamp] of recentlyCompletedCodesRef.current.entries()) {
-      if (now - timestamp > 60000) {
-        recentlyCompletedCodesRef.current.delete(c);
-      }
-    }
-    const cleanNoPunct = cleanCode.replace(/[\s\-_]/g, '');
-    let isRecentlyDone = false;
-    for (const [compCode] of recentlyCompletedCodesRef.current.entries()) {
-      if (compCode && compCode.replace(/[\s\-_]/g, '') === cleanNoPunct) {
-        isRecentlyDone = true;
-        break;
-      }
-    }
-    if (isRecentlyDone) {
-      console.log('Silently suppressing re-scan of recently completed order:', cleanCode);
       return;
     }
 
@@ -525,30 +505,39 @@ export const OutgoingOrdersPage: React.FC = () => {
       }
     } catch (err: any) {
       const errCode = err.response?.data?.code;
-      const serverErrMsg = err.response?.data?.message || `Code "${cleanCode}" could not be verified or has no pending books.`;
+      const serverErrMsg = err.response?.data?.message || `Code "${cleanCode}" could not be verified. Please check barcode.`;
 
-      // If order is already completed, do NOT sound error tone or voice! Silently suppress!
-      if (errCode === 'ORDER_ALREADY_COMPLETED') {
-        recentlyCompletedCodesRef.current.set(cleanCode, Date.now());
-        setScanResult({ type: null, message: '' });
-        return;
+      if (soundEnabled) {
+        playErrorTone();
       }
 
-      if (soundEnabled) playErrorTone();
       setScanResult({
         type: 'error',
         message: serverErrMsg,
       });
 
-      // Voice speaks the error message out loud so operator immediately knows what happened
+      // Voice speaks the warning message out loud so operator immediately knows what happened
       if (soundEnabled) {
-        speakErrorMessage(serverErrMsg);
+        if (errCode === 'ORDER_ALREADY_COMPLETED') {
+          speakErrorMessage('Warning! Yeh order pehle se hi fully dispatch ho chuka hai.');
+        } else if (errCode === 'ORDER_NOT_FOUND') {
+          speakErrorMessage('Warning! Galat student code. Order nahi mila.');
+        } else if (errCode === 'BOOK_CODE_MISMATCH') {
+          speakErrorMessage('Warning! Book code does not match this order.');
+        } else if (errCode === 'STUDENT_SCAN_REQUIRED_FIRST') {
+          speakErrorMessage('Warning! Pehle Student Barcode scan karein.');
+        } else {
+          speakErrorMessage(serverErrMsg);
+        }
       }
 
-      // Auto-dismiss error alert after 5 seconds so employee screen stays clean
+      // Auto-dismiss error alert after 6 seconds so employee screen stays clean
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+      }
       autoCloseTimerRef.current = setTimeout(() => {
         setScanResult({ type: null, message: '' });
-      }, 5000);
+      }, 6000);
     } finally {
       setIsScanning(false);
       setScannerCode('');
