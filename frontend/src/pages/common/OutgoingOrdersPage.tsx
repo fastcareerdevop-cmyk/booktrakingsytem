@@ -106,6 +106,8 @@ export const OutgoingOrdersPage: React.FC = () => {
 
   const [showPaytmSuccess, setShowPaytmSuccess] = useState(false);
   const showPaytmSuccessRef = useRef(false);
+  const [completedOrderId, setCompletedOrderId] = useState('');
+  const completedOrderIdRef = useRef('');
   const [completedStudentName, setCompletedStudentName] = useState('');
   const [completedTrackingId, setCompletedTrackingId] = useState('');
   const completedTrackingIdRef = useRef('');
@@ -122,6 +124,10 @@ export const OutgoingOrdersPage: React.FC = () => {
   useEffect(() => {
     showPaytmSuccessRef.current = showPaytmSuccess;
   }, [showPaytmSuccess]);
+
+  useEffect(() => {
+    completedOrderIdRef.current = completedOrderId;
+  }, [completedOrderId]);
 
   useEffect(() => {
     completedTrackingIdRef.current = completedTrackingId;
@@ -177,7 +183,7 @@ export const OutgoingOrdersPage: React.FC = () => {
     }, 100);
   };
 
-  const handleVerifyTrackingCode = (scannedRaw: string) => {
+  const handleVerifyTrackingCode = async (scannedRaw: string) => {
     const scanned = scannedRaw.trim().toUpperCase();
     setScannerCode('');
     if (scanInputRef.current) {
@@ -185,61 +191,80 @@ export const OutgoingOrdersPage: React.FC = () => {
     }
     if (!scanned) return;
 
-    const expTrack = completedTrackingIdRef.current || completedTrackingId || '';
-    const expOrd = completedOrderCodeRef.current || completedOrderCode || '';
+    if (trackingMatchStatus === 'matched') return;
 
-    const cleanScanned = scanned.replace(/[\s\-_]/g, '');
-    const cleanExpectedTracking = expTrack.trim().toUpperCase().replace(/[\s\-_]/g, '');
-    const cleanExpectedOrder = expOrd.trim().toUpperCase().replace(/[\s\-_]/g, '');
+    const targetOrderId = completedOrderIdRef.current || completedOrderId || lastScannedOrderRef.current?.id || lastScannedOrder?.id;
 
-    const isMatch = (cleanExpectedTracking && cleanScanned === cleanExpectedTracking) ||
-                    (cleanExpectedOrder && cleanScanned === cleanExpectedOrder);
+    try {
+      const res = await api.post('/dispatch/verify', {
+        action: 'CONFIRM_DISPATCH_WITH_TRACKING',
+        orderId: targetOrderId,
+        trackingCode: scanned,
+      });
 
-    if (isMatch) {
-      if (trackingMatchStatus === 'matched') return; // already in celebration countdown, ignore
+      if (res.data.success) {
+        if (autoCloseTimerRef.current) {
+          clearTimeout(autoCloseTimerRef.current);
+          autoCloseTimerRef.current = null;
+        }
+        if (matchTimerRef.current) {
+          clearInterval(matchTimerRef.current);
+          matchTimerRef.current = null;
+        }
 
-      if (autoCloseTimerRef.current) {
-        clearTimeout(autoCloseTimerRef.current);
-        autoCloseTimerRef.current = null;
+        setTrackingMatchStatus('matched');
+        setTrackingErrorMessage('');
+        setMatchCountdown(5);
+
+        // Register all codes of this completed order so any subsequent re-scan is ignored!
+        const expTrack = completedTrackingIdRef.current || completedTrackingId || '';
+        const expOrd = completedOrderCodeRef.current || completedOrderCode || '';
+        const now = Date.now();
+        if (expTrack) recentlyCompletedCodesRef.current.set(expTrack, now);
+        if (expOrd) recentlyCompletedCodesRef.current.set(expOrd, now);
+        if (scanned) recentlyCompletedCodesRef.current.set(scanned, now);
+        if (lastScannedOrder?.orderCode) recentlyCompletedCodesRef.current.set(lastScannedOrder.orderCode, now);
+        if (lastScannedOrder?.trackingId) recentlyCompletedCodesRef.current.set(lastScannedOrder.trackingId, now);
+
+        // Flush mobile scanner sync queue so duplicate scans of this parcel are flushed
+        api.post('/scanner-sync/clear', { session: stationSessionId }).catch(() => {});
+
+        // Remove order from table and update queue stats
+        if (targetOrderId) {
+          setOrders(prev => prev.filter(o => o.id !== targetOrderId));
+          setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - 1) }));
+        }
+
+        const itemsCount = lastScannedOrder?.totalRequired || 1;
+        setQueueStats(prev => ({
+          ...prev,
+          totalDispatchedCopies: prev.totalDispatchedCopies + itemsCount,
+          totalPendingCopies: Math.max(0, prev.totalPendingCopies - itemsCount),
+        }));
+
+        if (soundEnabled) {
+          playOrderCompleteFanfare();
+          speakVoiceAnnouncement('Tracking ID matched successfully! Order fulfilled and stock deducted. Next order, please.');
+        }
+
+        // Show screen for exactly 5 seconds before automatically moving to next order
+        matchTimerRef.current = setInterval(() => {
+          setMatchCountdown((prev) => {
+            if (prev <= 1) {
+              if (matchTimerRef.current) clearInterval(matchTimerRef.current);
+              matchTimerRef.current = null;
+              handleDismissSuccessOverlay();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
       }
-      if (matchTimerRef.current) {
-        clearInterval(matchTimerRef.current);
-        matchTimerRef.current = null;
-      }
-      setTrackingMatchStatus('matched');
-      setTrackingErrorMessage('');
-      setMatchCountdown(5);
+    } catch (err: any) {
+      const serverErrMsg = err.response?.data?.message || `Galat Tracking ID "${scanned}". Kripya sahi parcel scan karein.`;
+      const expTrack = completedTrackingIdRef.current || completedTrackingId || '';
+      const expOrd = completedOrderCodeRef.current || completedOrderCode || '';
 
-      // Register all codes of this completed order so any subsequent re-scan is ignored!
-      const now = Date.now();
-      if (expTrack) recentlyCompletedCodesRef.current.set(expTrack, now);
-      if (expOrd) recentlyCompletedCodesRef.current.set(expOrd, now);
-      if (scanned) recentlyCompletedCodesRef.current.set(scanned, now);
-      if (lastScannedOrder?.orderCode) recentlyCompletedCodesRef.current.set(lastScannedOrder.orderCode, now);
-      if (lastScannedOrder?.trackingId) recentlyCompletedCodesRef.current.set(lastScannedOrder.trackingId, now);
-
-      // Flush mobile scanner sync queue so duplicate scans of this parcel are flushed
-      api.post('/scanner-sync/clear', { session: stationSessionId }).catch(() => {});
-
-      if (soundEnabled) {
-        playSuccessChime();
-        speakVoiceAnnouncement('Tracking ID matched successfully! Parcel verified. Order complete.');
-      }
-
-      // Show screen for exactly 5 seconds before automatically moving to next order
-      matchTimerRef.current = setInterval(() => {
-        setMatchCountdown((prev) => {
-          if (prev <= 1) {
-            if (matchTimerRef.current) clearInterval(matchTimerRef.current);
-            matchTimerRef.current = null;
-            handleDismissSuccessOverlay();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      // ❌ Mismatch: STAY ON SCREEN until correct ID is scanned!
       if (autoCloseTimerRef.current) {
         clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
@@ -247,7 +272,7 @@ export const OutgoingOrdersPage: React.FC = () => {
       setShowPaytmSuccess(true);
       showPaytmSuccessRef.current = true;
       setTrackingMatchStatus('mismatch');
-      setTrackingErrorMessage(`Scanned: "${scanned}" | Sahi Tracking ID: "${expTrack || expOrd || 'N/A'}"`);
+      setTrackingErrorMessage(serverErrMsg || `Scanned: "${scanned}" | Sahi Tracking ID: "${expTrack || expOrd || 'N/A'}"`);
       if (soundEnabled) {
         playErrorTone();
         speakErrorMessage('Galat tracking ID. Kripya sahi parcel scan karein.');
@@ -273,13 +298,6 @@ export const OutgoingOrdersPage: React.FC = () => {
     }, 120);
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // If user presses Escape key while overlay is open, immediately skip & proceed to next order!
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        handleDismissSuccessOverlay();
-        return;
-      }
-
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
@@ -487,21 +505,21 @@ export const OutgoingOrdersPage: React.FC = () => {
           itemsDispatched: countDispatched > 0 ? countDispatched : undefined,
         });
 
-        // 🌟 Confirmation Box: Stays on screen for 15 seconds while voice announces 2 times!
-        if (isComplete && !isLoadedOnly) {
+        // 🌟 Step 3: Trigger Compulsory Tracking ID Verification
+        if ((isComplete || data.allBooksVerified || data.requiresTrackingMatch || data.scanType === 'PRODUCT_CODE') && !isLoadedOnly) {
           setShowPaytmSuccess(true);
+          showPaytmSuccessRef.current = true;
+          setCompletedOrderId(updatedOrder?.id || activeOrderId || '');
           setCompletedStudentName(updatedOrder?.studentName || '');
           setCompletedTrackingId(updatedOrder?.trackingId || '');
           setCompletedOrderCode(updatedOrder?.orderCode || '');
           setTrackingInput('');
           setTrackingMatchStatus('idle');
           setTrackingErrorMessage('');
-          setOrders(prev => prev.filter(o => o.id !== updatedOrder.id));
-          setPagination(prev => ({ ...prev, total: Math.max(0, prev.total - 1) }));
 
           if (soundEnabled) {
-            playOrderCompleteFanfare();
-            speakVoiceAnnouncement('Order of upcoming CA is fulfilled at FAST Education. Next order, please.');
+            playSuccessChime();
+            speakVoiceAnnouncement(`Product verified for ${updatedOrder?.studentName}. Now scan tracking ID to confirm dispatch.`);
           }
         }
       }
@@ -957,22 +975,26 @@ export const OutgoingOrdersPage: React.FC = () => {
             </div>
 
             {/* Confirmation Banner */}
-            <div className="inline-block bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full mb-1 border border-emerald-200">
-              ✓ ORDER VERIFIED & DISPATCHED
+            <div className={`inline-block text-xs font-bold px-3 py-1 rounded-full mb-1 border ${
+              trackingMatchStatus === 'matched'
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                : 'bg-amber-100 text-amber-900 border-amber-300'
+            }`}>
+              {trackingMatchStatus === 'matched' ? '✓ ORDER FULFILLED & STOCK DEDUCTED' : '⚡ STEP 3: SCAN TRACKING ID (COMPULSORY)'}
             </div>
             <h3 className="text-xl font-black text-slate-900 tracking-tight">
-              {completedStudentName ? completedStudentName : 'Order Completed!'}
+              {completedStudentName ? completedStudentName : 'Order Verification'}
             </h3>
             <p className="text-xs font-semibold text-emerald-600 mt-0.5 flex items-center justify-center gap-1.5">
-              <span>All Books Verified & Done</span>
+              <span>{trackingMatchStatus === 'matched' ? 'Order Complete & Dispatched' : 'All Books Verified in Package ✅'}</span>
             </p>
 
-            {/* ─── Tracking ID Match Section (Optional) ─── */}
+            {/* ─── Tracking ID Match Section (Compulsory) ─── */}
             <div className="mt-3.5 pt-3 border-t border-slate-100 text-left">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
                   <Barcode className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Tracking ID Match (Optional):</span>
+                  <span>Parcel Tracking ID (अनिवार्य / Compulsory):</span>
                 </span>
                 {completedTrackingId && (
                   <span className="font-mono text-[11px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
@@ -1049,7 +1071,7 @@ export const OutgoingOrdersPage: React.FC = () => {
                 {trackingMatchStatus === 'mismatch' ? (
                   <span className="text-rose-600 font-bold flex items-center gap-1 text-[11px]">
                     <span className="w-2 h-2 rounded-full bg-rose-500" />
-                    <span>Waiting for match...</span>
+                    <span>Galat Barcode! Sahi scan karein...</span>
                   </span>
                 ) : trackingMatchStatus === 'matched' ? (
                   <span className="text-emerald-700 font-bold flex items-center gap-1.5 text-xs">
@@ -1057,24 +1079,30 @@ export const OutgoingOrdersPage: React.FC = () => {
                     <span>Next in: <strong className="font-mono text-emerald-900 font-black">{matchCountdown}s</strong></span>
                   </span>
                 ) : (
-                  <span className="text-slate-500 text-[11px] font-semibold flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>Scan Tracking ID ya Skip karein</span>
+                  <span className="text-amber-800 text-[11px] font-bold flex items-center gap-1.5 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span>Tracking Scan Anivarya Hai (Required)</span>
                   </span>
                 )}
               </div>
 
-              <button
-                onClick={handleDismissSuccessOverlay}
-                className={`px-4 py-2 font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 ${
-                  trackingMatchStatus === 'mismatch'
-                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                }`}
-              >
-                <span>{trackingMatchStatus === 'mismatch' ? 'Skip & Next (Esc)' : trackingMatchStatus === 'matched' ? `Next Order Now (${matchCountdown}s)` : 'अगला आर्डर (Esc / Skip)'}</span>
-                <ArrowRight size={13} />
-              </button>
+              {trackingMatchStatus === 'matched' ? (
+                <button
+                  onClick={handleDismissSuccessOverlay}
+                  className="px-4 py-2 font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <span>Next Order Now ({matchCountdown}s)</span>
+                  <ArrowRight size={13} />
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowPaytmSuccess(false)}
+                  className="px-3 py-1.5 font-semibold rounded-lg text-[11px] text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-all cursor-pointer"
+                  title="Cancel verification (Stock deduct nahi hoga)"
+                >
+                  Cancel (Pending)
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1135,7 +1163,7 @@ export const OutgoingOrdersPage: React.FC = () => {
               }
               className="w-full px-4 py-3.5 text-sm font-mono border-2 border-red-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-600 bg-white shadow-xs font-bold"
               autoFocus
-              disabled={isScanning}
+              disabled={isScanning || showPaytmSuccess}
             />
             {scannerCode && (
               <button onClick={() => setScannerCode('')} className="absolute right-3 top-1/2 -translate-y-1/2">

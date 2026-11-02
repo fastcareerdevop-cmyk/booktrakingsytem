@@ -1,8 +1,9 @@
 import { Response, NextFunction } from 'express';
+import mongoose from 'mongoose';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { verifyDispatchSchema } from '../validators/dispatch.validator';
 import * as dispatchService from '../services/dispatch.service';
-import { Order } from '../models';
+import { Order, BookStock, DispatchLog, VerificationAttempt } from '../models';
 import { successResponse, errorResponse } from '../utils/response';
 import * as orderService from '../services/order.service';
 import { computeOrderStatus, computeItemStatus } from '../services/order.service';
@@ -93,6 +94,151 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
         ...result,
         notification,
       });
+    }
+
+    // 0B. Compulsory Tracking ID Match: Deduct stock and fulfill order ONLY when Tracking ID matches!
+    if (action === 'CONFIRM_DISPATCH_WITH_TRACKING' && orderId) {
+      const trackingCode = (req.body.trackingCode || enteredCode || '').trim().toUpperCase();
+      if (!trackingCode) {
+        return errorResponse(res, 'Tracking ID scan karna anivarya hai.', 'TRACKING_ID_REQUIRED', 400);
+      }
+
+      const order = await Order.findById(orderId);
+      if (!order) {
+        return errorResponse(res, 'Order not found', 'ORDER_NOT_FOUND', 404);
+      }
+
+      if (computeOrderStatus(order.items) === 'COMPLETED') {
+        return errorResponse(
+          res,
+          `❌ Order "${order.trackingId || order.orderCode}" (${order.studentName}) pehle se hi fully dispatch ho chuka hai!`,
+          'ORDER_ALREADY_COMPLETED',
+          400
+        );
+      }
+
+      // Check tracking code match against expected Tracking ID or Order Code
+      const cleanScanned = trackingCode.replace(/[\s\-_]/g, '').toUpperCase();
+      const cleanExpectedTracking = (order.trackingId || '').replace(/[\s\-_]/g, '').toUpperCase();
+      const cleanExpectedOrder = (order.orderCode || '').replace(/[\s\-_]/g, '').toUpperCase();
+
+      const isMatch = (cleanExpectedTracking && cleanScanned === cleanExpectedTracking) ||
+                      (cleanExpectedOrder && cleanScanned === cleanExpectedOrder);
+
+      if (!isMatch) {
+        return errorResponse(
+          res,
+          `❌ Galat Tracking ID "${trackingCode}"! Sahi Tracking ID: "${order.trackingId || order.orderCode}"`,
+          'TRACKING_ID_MISMATCH',
+          400
+        );
+      }
+
+      // Tracking ID MATCHED! Atomically deduct stock from BookStock and complete order items!
+      for (const item of order.items) {
+        const remaining = item.requiredQuantity - item.dispatchedQuantity;
+        if (remaining <= 0) continue;
+
+        const cleanCode = normalizeBookCode(item.bookCode);
+
+        // Update item in order
+        await Order.updateOne(
+          { _id: order._id, 'items._id': item._id },
+          { $set: { 'items.$.dispatchedQuantity': item.requiredQuantity } }
+        );
+
+        // Deduct warehouse stock
+        await BookStock.findOneAndUpdate(
+          { bookCode: cleanCode },
+          {
+            $setOnInsert: {
+              bookCode: cleanCode,
+              totalInward: 0,
+              lowStockThreshold: 10,
+              lastRestockedAt: new Date(),
+            },
+            $set: { bookName: item.bookName },
+            $inc: {
+              availableQuantity: -remaining,
+              totalDispatched: remaining,
+            },
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+
+        await DispatchLog.create({
+          orderId: order._id,
+          orderItemId: item._id.toString(),
+          employeeId: new mongoose.Types.ObjectId(req.user.id),
+          verifiedBookCode: item.bookCode,
+          quantity: remaining,
+          requestId: requestId ? `${requestId}-${item._id}` : undefined,
+          result: 'SUCCESS',
+          dispatchMode: 'TRACKING_VERIFIED',
+        });
+
+        await VerificationAttempt.create({
+          orderId: order._id,
+          orderItemId: item._id.toString(),
+          employeeId: new mongoose.Types.ObjectId(req.user.id),
+          enteredBookCode: trackingCode,
+          success: true,
+        });
+      }
+
+      const updatedOrder = await Order.findById(order._id);
+      const totalRequired = updatedOrder!.items.reduce((acc: number, i: any) => acc + i.requiredQuantity, 0);
+      const totalDispatched = updatedOrder!.items.reduce((acc: number, i: any) => acc + i.dispatchedQuantity, 0);
+
+      await logAudit({
+        actorUserId: req.user.id,
+        action: 'ORDER_DISPATCHED_WITH_TRACKING_MATCH',
+        entityType: 'Order',
+        entityId: order._id.toString(),
+        metadata: {
+          trackingCode,
+          student: order.studentName,
+          totalDispatched,
+        },
+      });
+
+      const notification = await notifyOrderWhenFullyDispatched(
+        updatedOrder!._id.toString(),
+        req.user.id,
+        0
+      );
+
+      return successResponse(
+        res,
+        `Tracking ID "${trackingCode}" matched successfully! Order for ${order.studentName} fulfilled and stock deducted.`,
+        {
+          scanType: 'TRACKING_MATCHED_AND_DISPATCHED',
+          notification,
+          order: {
+            id: updatedOrder!._id.toString(),
+            orderCode: updatedOrder!.orderCode,
+            productCode: updatedOrder!.productCode,
+            studentName: updatedOrder!.studentName,
+            mobileNumber: updatedOrder!.mobileNumber,
+            trackingId: updatedOrder!.trackingId,
+            totalRequired,
+            totalDispatched,
+            totalPending: 0,
+            status: 'COMPLETED',
+            items: updatedOrder!.items.map((i: any) => ({
+              id: i._id.toString(),
+              productCode: i.productCode || updatedOrder!.productCode,
+              productName: i.productName || 'Product',
+              bookCode: i.bookCode,
+              bookName: i.bookName,
+              requiredQuantity: i.requiredQuantity,
+              dispatchedQuantity: i.dispatchedQuantity,
+              pendingQuantity: 0,
+              status: 'DISPATCHED',
+            })),
+          },
+        }
+      );
     }
 
     if (!scannedCode) {
@@ -196,26 +342,44 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
           activeOrder.items.some((i: any) => i.productCode && i.productCode.toUpperCase() === scannedCode);
 
         if (isMatchingProduct) {
-          const result = await dispatchService.dispatchByProductCode({
-            productCode: scannedCode,
-            orderId: activeOrder._id.toString(),
-            employeeId: req.user.id,
-            requestId,
-          });
-          const notification = await notifyOrderWhenFullyDispatched(
-            result.order?.id || activeOrder._id.toString(),
-            req.user.id,
-            result.order?.totalPending ?? 0
-          );
-          const isFullyDone = (result.order?.totalPending ?? 0) === 0;
-          const msg = isFullyDone
-            ? `Product Code "${scannedCode}" Scanned & Verified! All products & books verified & dispatched for ${activeOrder.studentName}. Order Complete!`
-            : `Product Code "${scannedCode}" Scanned & Verified (${result.itemsDispatched || 1} book(s) dispatched). ${result.order?.totalPending} item(s) still pending for ${activeOrder.studentName}. Please scan remaining product code(s).`;
+          const totalRequired = activeOrder.items.reduce((acc: number, i: any) => acc + i.requiredQuantity, 0);
+          const msg = `Product Code "${scannedCode}" Scanned & Verified! All ${totalRequired} books verified in parcel. Ab parcel ka Tracking ID scan karein.`;
 
           return successResponse(
             res,
             msg,
-            { ...result, message: msg, notification }
+            {
+              scanType: 'PRODUCT_CODE',
+              allBooksVerified: true,
+              requiresTrackingMatch: true,
+              message: msg,
+              itemsDispatched: totalRequired,
+              order: {
+                id: activeOrder._id.toString(),
+                orderCode: activeOrder.orderCode,
+                productCode: activeOrder.productCode,
+                studentName: activeOrder.studentName,
+                mobileNumber: activeOrder.mobileNumber,
+                trackingId: activeOrder.trackingId,
+                totalRequired,
+                totalDispatched: totalRequired,
+                totalPending: 0,
+                allVerified: true,
+                status: 'VERIFYING_TRACKING',
+                items: activeOrder.items.map((i: any) => ({
+                  id: i._id.toString(),
+                  productCode: i.productCode || activeOrder.productCode,
+                  productName: i.productName || 'Product',
+                  bookCode: i.bookCode,
+                  bookName: i.bookName,
+                  requiredQuantity: i.requiredQuantity,
+                  dispatchedQuantity: i.requiredQuantity,
+                  pendingQuantity: 0,
+                  isVerified: true,
+                  status: 'VERIFIED',
+                })),
+              },
+            }
           );
         }
 
