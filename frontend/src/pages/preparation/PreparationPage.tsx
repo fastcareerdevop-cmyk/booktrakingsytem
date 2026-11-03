@@ -19,6 +19,9 @@ import {
   X,
   ArrowRight,
   ShieldCheck,
+  Zap,
+  Check,
+  Save,
 } from 'lucide-react';
 import api from '../../services/api';
 import { playSuccessChime, playErrorTone, playOrderCompleteFanfare, speakVoiceAnnouncement, speakErrorMessage } from '../../utils/sound';
@@ -63,6 +66,7 @@ export const PreparationPage: React.FC = () => {
   // Scanning Progress State
   const [currentPackageNum, setCurrentPackageNum] = useState<number>(1);
   const [currentBookIndex, setCurrentBookIndex] = useState<number>(0);
+  const [completedPackagesCount, setCompletedPackagesCount] = useState<number>(0);
   const [scannedHistory, setScannedHistory] = useState<{ packageNum: number; bookCode: string; bookName: string }[]>([]);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [scanFeedback, setScanFeedback] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
@@ -114,6 +118,7 @@ export const PreparationPage: React.FC = () => {
     setPackagingPhase('SELECT_QTY');
     setCurrentPackageNum(1);
     setCurrentBookIndex(0);
+    setCompletedPackagesCount(0);
     setScannedHistory([]);
     setBarcodeInput('');
     setScanFeedback({ type: null, message: '' });
@@ -126,16 +131,17 @@ export const PreparationPage: React.FC = () => {
     setPackagingPhase('SCANNING');
     setCurrentPackageNum(1);
     setCurrentBookIndex(0);
+    setCompletedPackagesCount(0);
     setScannedHistory([]);
     setBarcodeInput('');
     setScanFeedback({
       type: 'success',
-      message: `Packaging started for ${targetQuantity} package(s). Scan Book 1 to begin!`,
+      message: `Packaging started for ${targetQuantity} package(s). Scan Book 1 or click "Manual Tick" to begin!`,
     });
 
     if (soundEnabled) {
       playSuccessChime();
-      speakVoiceAnnouncement(`Packaging started for ${targetQuantity} sets. Please scan books one by one.`);
+      speakVoiceAnnouncement(`Packaging started for ${targetQuantity} sets. Please scan or click books one by one.`);
     }
 
     setTimeout(() => {
@@ -155,7 +161,79 @@ export const PreparationPage: React.FC = () => {
     }
   }, [packagingPhase]);
 
-  // Handle single physical book scan
+  // Persist a single completed package immediately to backend
+  const saveSinglePackage = async (productCode: string, booksScanned: string[]) => {
+    setIsSavingBatch(true);
+    try {
+      const res = await api.post('/preparation/pack-batch', {
+        productCode,
+        quantity: 1,
+        scannedBooks: booksScanned,
+      });
+
+      if (res.data.success) {
+        setCompletedPackagesCount(prev => prev + 1);
+
+        // Update local state immediately for instant UI responsiveness
+        setStockSummary(prev => ({
+          ...prev,
+          packagedStock: prev.packagedStock + 1,
+          shelfStock: Math.max(0, prev.shelfStock - 1),
+        }));
+
+        setActiveProduct(prev => prev ? {
+          ...prev,
+          packagedStock: (prev.packagedStock || 0) + 1,
+          shelfStock: Math.max(0, (prev.shelfStock || 0) - 1),
+        } : null);
+
+        fetchProducts();
+      }
+    } catch (err: any) {
+      console.error('Failed to save completed package:', err);
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
+
+  // Direct batch pack without scanning (user requested: manual batch pack)
+  const handleDirectPackWithoutScanning = async (qty: number) => {
+    if (!activeProduct || qty <= 0) return;
+    setIsSavingBatch(true);
+    try {
+      const res = await api.post('/preparation/pack-batch', {
+        productCode: activeProduct.productCode,
+        quantity: qty,
+        scannedBooks: ['DIRECT_MANUAL_PACK'],
+      });
+
+      if (res.data.success) {
+        setCompletedPackagesCount(prev => prev + qty);
+        setPackagingPhase('COMPLETED');
+        setScanFeedback({
+          type: 'success',
+          message: `🎉 Successfully packed ${qty} package(s) directly without scanning!`,
+        });
+
+        if (soundEnabled) {
+          playOrderCompleteFanfare();
+          speakVoiceAnnouncement(`${qty} packages packed directly without scanning.`);
+        }
+
+        fetchProducts();
+      }
+    } catch (err: any) {
+      console.error('Failed to direct pack batch:', err);
+      setScanFeedback({
+        type: 'error',
+        message: 'Failed to direct pack. Please try again.',
+      });
+    } finally {
+      setIsSavingBatch(false);
+    }
+  };
+
+  // Handle single physical book scan (or manual tick verification)
   const handleBookScan = (codeToScan: string) => {
     if (!activeProduct || packagingPhase !== 'SCANNING') return;
 
@@ -192,11 +270,13 @@ export const PreparationPage: React.FC = () => {
       // Check if current package has all its books scanned
       if (nextBookIdx >= expectedBooks.length) {
         // Current package is complete!
+        // Immediately persist THIS package (1 set) to backend
+        saveSinglePackage(activeProduct.productCode, expectedBooks.map(b => b.bookCode));
+
         const nextPackageNum = currentPackageNum + 1;
 
         if (nextPackageNum > targetQuantity) {
           // 🎉 ALL PACKAGES IN BATCH ARE COMPLETE!
-          // "fir product count pura ho jayega fir uske bad book scan hona band ho jayega!"
           setPackagingPhase('COMPLETED');
           setScanFeedback({
             type: 'success',
@@ -207,19 +287,16 @@ export const PreparationPage: React.FC = () => {
             playOrderCompleteFanfare();
             speakVoiceAnnouncement(`All ${targetQuantity} packages are packed successfully! Ready for parcel packaging.`);
           }
-
-          // Persist batch to backend
-          handleSaveCompletedBatch(activeProduct.productCode, targetQuantity, nextScannedList.map(s => s.bookCode));
         } else {
           // Move to next package
           setCurrentPackageNum(nextPackageNum);
           setCurrentBookIndex(0);
           setScanFeedback({
             type: 'success',
-            message: `✓ Package ${currentPackageNum} complete! Now scan Book 1 for Package ${nextPackageNum} of ${targetQuantity}...`,
+            message: `✓ Package ${currentPackageNum} complete & saved! Now scan Book 1 for Package ${nextPackageNum} of ${targetQuantity}...`,
           });
           if (soundEnabled) {
-            speakVoiceAnnouncement(`Package ${currentPackageNum} complete. Starting Package ${nextPackageNum}.`);
+            speakVoiceAnnouncement(`Package ${currentPackageNum} complete and saved. Starting Package ${nextPackageNum}.`);
           }
         }
       } else {
@@ -248,24 +325,67 @@ export const PreparationPage: React.FC = () => {
     }, 50);
   };
 
-  // Save completed batch to backend
-  const handleSaveCompletedBatch = async (productCode: string, qty: number, booksScanned: string[]) => {
-    setIsSavingBatch(true);
-    try {
-      const res = await api.post('/preparation/pack-batch', {
-        productCode,
-        quantity: qty,
-        scannedBooks: booksScanned,
-      });
+  // Manual tick a single book without barcode scanning
+  const handleManualTickBook = (targetBookIdx: number) => {
+    if (!activeProduct || packagingPhase !== 'SCANNING') return;
+    const expectedBooks = activeProduct.books;
+    if (expectedBooks.length === 0) return;
 
-      if (res.data.success) {
-        fetchProducts();
-      }
-    } catch (err: any) {
-      console.error('Failed to save preparation batch:', err);
-    } finally {
-      setIsSavingBatch(false);
+    if (targetBookIdx !== currentBookIndex) return;
+
+    const expectedBook = expectedBooks[currentBookIndex];
+    handleBookScan(expectedBook.bookCode);
+  };
+
+  // Tick all remaining books in the current package directly
+  const handleTickEntirePackage = () => {
+    if (!activeProduct || packagingPhase !== 'SCANNING') return;
+    const expectedBooks = activeProduct.books;
+    if (expectedBooks.length === 0) return;
+
+    const remainingBooks = expectedBooks.slice(currentBookIndex);
+    const newScans = remainingBooks.map(b => ({
+      packageNum: currentPackageNum,
+      bookCode: b.bookCode,
+      bookName: b.bookName,
+    }));
+
+    setScannedHistory(prev => [...prev, ...newScans]);
+
+    if (soundEnabled) {
+      playSuccessChime();
+      speakVoiceAnnouncement(`Package ${currentPackageNum} complete.`);
     }
+
+    // Save this 1 package immediately to backend
+    saveSinglePackage(activeProduct.productCode, expectedBooks.map(b => b.bookCode));
+
+    const nextPackageNum = currentPackageNum + 1;
+    if (nextPackageNum > targetQuantity) {
+      setPackagingPhase('COMPLETED');
+      setScanFeedback({
+        type: 'success',
+        message: `🎉 Batch Completed! All ${targetQuantity} package(s) have been verified and packed!`,
+      });
+      if (soundEnabled) {
+        playOrderCompleteFanfare();
+        speakVoiceAnnouncement(`All ${targetQuantity} packages are packed successfully!`);
+      }
+    } else {
+      setCurrentPackageNum(nextPackageNum);
+      setCurrentBookIndex(0);
+      setScanFeedback({
+        type: 'success',
+        message: `✓ Package ${currentPackageNum} complete & saved! Now scan Book 1 for Package ${nextPackageNum} of ${targetQuantity}...`,
+      });
+    }
+  };
+
+  // Direct pack remaining packages in batch without scanning
+  const handleDirectPackRemaining = async () => {
+    const remaining = targetQuantity - completedPackagesCount;
+    if (remaining <= 0) return;
+    await handleDirectPackWithoutScanning(remaining);
   };
 
   const totalBooksInBatch = activeProduct ? activeProduct.books.length * targetQuantity : 0;
@@ -571,23 +691,56 @@ export const PreparationPage: React.FC = () => {
                     Each package requires <strong className="text-slate-800">{activeProduct.books.length} books</strong>.
                   </span>
                   <span className="font-bold text-indigo-800">
-                    Total books to scan: <strong className="font-mono text-sm">{activeProduct.books.length * targetQuantity} books</strong>
+                    Total books to pack: <strong className="font-mono text-sm">{activeProduct.books.length * targetQuantity} books</strong>
                   </span>
                 </div>
 
-                <button
-                  onClick={handleConfirmQuantityAndStartScanning}
-                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <ScanLine size={18} />
-                  <span>Next: Start Scanning Books ({targetQuantity} Packages)</span>
-                </button>
+                {/* Dual Options: 1) Scan books one-by-one OR 2) Direct pack without scanning */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={handleConfirmQuantityAndStartScanning}
+                    className="py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <ScanLine size={16} />
+                    <span>Scan Books One-by-One ({targetQuantity} Pkg)</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleDirectPackWithoutScanning(targetQuantity)}
+                    disabled={isSavingBatch}
+                    className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Zap size={16} className={isSavingBatch ? 'animate-spin' : ''} />
+                    <span>Direct Pack Without Scanning ({targetQuantity} Pkg)</span>
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* ── PHASE 2: HANDS-FREE BOOK SCANNING ── */}
+            {/* ── PHASE 2: HANDS-FREE BOOK SCANNING / MANUAL TICK ── */}
             {packagingPhase === 'SCANNING' && (
               <div className="space-y-4">
+                {/* Early Save Status Banner if at least 1 package already completed */}
+                {completedPackagesCount > 0 && (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-950 font-bold shadow-xs animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                      <span>
+                        ✓ {completedPackagesCount} Package(s) already saved to Packaged Stock!
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setIsPackingModalOpen(false);
+                        fetchProducts();
+                      }}
+                      className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-xs"
+                    >
+                      Save & Exit Now ({completedPackagesCount} Done)
+                    </button>
+                  </div>
+                )}
+
                 {/* Active Package Tracker Header */}
                 <div className="flex items-center justify-between bg-slate-900 text-white px-4 py-2.5 rounded-xl">
                   <div className="flex items-center gap-2">
@@ -611,8 +764,20 @@ export const PreparationPage: React.FC = () => {
 
                 {/* List of Books for CURRENT Package */}
                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                  <div className="text-xs font-bold uppercase text-slate-500 mb-2">
-                    Books Required for Package #{currentPackageNum}:
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold uppercase text-slate-500">
+                      Books Required for Package #{currentPackageNum}:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleTickEntirePackage}
+                      disabled={isSavingBatch}
+                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-100/70 hover:bg-indigo-200/70 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                      title="Is package ki saari kitabon ko ek sath tick karke package complete karein"
+                    >
+                      <Zap size={13} />
+                      <span>Tick Whole Package #{currentPackageNum}</span>
+                    </button>
                   </div>
                   <div className="space-y-2">
                     {activeProduct.books.map((b, idx) => {
@@ -652,13 +817,22 @@ export const PreparationPage: React.FC = () => {
 
                           <div>
                             {isScanned ? (
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
-                                ✓ Scanned
+                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg">
+                                ✓ Verified
                               </span>
                             ) : isCurrent ? (
-                              <span className="text-[11px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 animate-bounce">
-                                ⚡ Aim Scanner Here
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleManualTickBook(idx)}
+                                  disabled={isSavingBatch}
+                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                                  title="Bina barcode scan kiye book verify karein"
+                                >
+                                  <Check size={14} />
+                                  <span>Manual Tick (जोड़ें)</span>
+                                </button>
+                              </div>
                             ) : (
                               <span className="text-[10px] text-slate-400 font-medium">
                                 Waiting...
@@ -685,7 +859,7 @@ export const PreparationPage: React.FC = () => {
                       type="text"
                       value={barcodeInput}
                       onChange={(e) => setBarcodeInput(e.target.value.toUpperCase())}
-                      placeholder={`⚡ Scan Book ${currentBookIndex + 1} (${activeProduct.books[currentBookIndex]?.bookCode || ''})...`}
+                      placeholder={`⚡ Scan Book ${currentBookIndex + 1} (${activeProduct.books[currentBookIndex]?.bookCode || ''}) ya click Manual Tick...`}
                       className="w-full px-4 py-3.5 text-sm font-mono font-bold border-2 border-indigo-500 rounded-xl focus:outline-none focus:ring-4 focus:ring-indigo-100 bg-white shadow-xs"
                       autoFocus
                     />
@@ -710,6 +884,36 @@ export const PreparationPage: React.FC = () => {
                     <span>{scanFeedback.message}</span>
                   </div>
                 )}
+
+                {/* Additional Quick Controls during scanning */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-slate-200 text-xs">
+                  {targetQuantity > currentPackageNum ? (
+                    <button
+                      type="button"
+                      onClick={handleDirectPackRemaining}
+                      disabled={isSavingBatch}
+                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold transition-colors cursor-pointer"
+                    >
+                      <Zap size={14} className="text-amber-600" />
+                      <span>Direct Pack Remaining ({targetQuantity - completedPackagesCount} Pkg) Without Scanning</span>
+                    </button>
+                  ) : (
+                    <div />
+                  )}
+
+                  {completedPackagesCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPackingModalOpen(false);
+                        fetchProducts();
+                      }}
+                      className="w-full sm:w-auto px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
+                    >
+                      Cancel Remaining & Exit ({completedPackagesCount} Saved)
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -728,7 +932,7 @@ export const PreparationPage: React.FC = () => {
                     Packaging Batch Complete!
                   </h3>
                   <p className="text-xs font-semibold text-emerald-700 mt-1">
-                    ✓ {targetQuantity} package(s) of "{activeProduct.productCode}" are packed and ready in parcel packaging.
+                    ✓ {completedPackagesCount || targetQuantity} package(s) of "{activeProduct.productCode}" are packed and ready in parcel packaging.
                   </p>
                 </div>
 
@@ -739,16 +943,16 @@ export const PreparationPage: React.FC = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Packages Prepared:</span>
-                    <span className="font-mono font-black text-indigo-700">+{targetQuantity} Sets</span>
+                    <span className="font-mono font-black text-indigo-700">+{completedPackagesCount || targetQuantity} Sets</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Total Books Scanned:</span>
-                    <span className="font-mono font-bold text-slate-800">{totalBooksInBatch} books</span>
+                    <span className="text-slate-500">Total Books Scanned/Added:</span>
+                    <span className="font-mono font-bold text-slate-800">{activeProduct.books.length * (completedPackagesCount || targetQuantity)} books</span>
                   </div>
                   <div className="flex justify-between pt-1 border-t border-slate-200">
                     <span className="text-slate-700 font-bold">New Packaged Stock:</span>
                     <span className="font-mono font-black text-emerald-700">
-                      {activeProduct.packagedStock + targetQuantity} ready sets
+                      {activeProduct.packagedStock} ready sets
                     </span>
                   </div>
                 </div>
@@ -758,13 +962,17 @@ export const PreparationPage: React.FC = () => {
                     onClick={() => {
                       setPackagingPhase('SELECT_QTY');
                       setTargetQuantity(1);
+                      setCompletedPackagesCount(0);
                     }}
                     className="px-4 py-2.5 text-xs font-bold rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
                   >
                     Pack Another Batch
                   </button>
                   <button
-                    onClick={() => setIsPackingModalOpen(false)}
+                    onClick={() => {
+                      setIsPackingModalOpen(false);
+                      fetchProducts();
+                    }}
                     className="px-6 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all cursor-pointer"
                   >
                     Done & Close
