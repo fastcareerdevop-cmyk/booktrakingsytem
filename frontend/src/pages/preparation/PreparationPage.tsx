@@ -47,6 +47,13 @@ export const PreparationPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Live Warehouse Stock Summary (Shelf vs Packaged)
+  const [stockSummary, setStockSummary] = useState({
+    totalAvailableStock: 0,
+    shelfStock: 0,
+    packagedStock: 0,
+  });
+
   // Active Packaging Modal State
   const [activeProduct, setActiveProduct] = useState<PreparationProduct | null>(null);
   const [isPackingModalOpen, setIsPackingModalOpen] = useState(false);
@@ -63,16 +70,27 @@ export const PreparationPage: React.FC = () => {
 
   const scanInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch all products
+  // Fetch all products & warehouse stock summary
   const fetchProducts = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await api.get('/preparation/products');
-      if (res.data.success) {
-        setProducts(res.data.data.products || []);
+      const [productsRes, summaryRes] = await Promise.all([
+        api.get('/preparation/products'),
+        api.get('/preparation/stock-summary'),
+      ]);
+
+      if (productsRes.data.success) {
+        setProducts(productsRes.data.data.products || []);
+      }
+      if (summaryRes.data.success) {
+        setStockSummary({
+          totalAvailableStock: summaryRes.data.data.totalAvailableStock || 0,
+          shelfStock: summaryRes.data.data.shelfStock || 0,
+          packagedStock: summaryRes.data.data.packagedStock || 0,
+        });
       }
     } catch (err) {
-      console.error('Failed to load preparation products:', err);
+      console.error('Failed to load preparation products & stock summary:', err);
     } finally {
       setIsLoading(false);
     }
@@ -81,11 +99,6 @@ export const PreparationPage: React.FC = () => {
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
-
-  // Total summary metrics
-  const totalPackagedSets = products.reduce((acc, p) => acc + (p.packagedStock || 0), 0);
-  const totalShelfStock = products.reduce((acc, p) => acc + (p.shelfStock || 0), 0);
-  const totalStockAll = products.reduce((acc, p) => acc + (p.totalAvailableStock || 0), 0);
 
   // Filtered products list
   const filteredProducts = products.filter(p =>
@@ -310,7 +323,7 @@ export const PreparationPage: React.FC = () => {
             </span>
           </div>
           <div className="text-3xl font-black text-indigo-950 font-mono">
-            {totalPackagedSets}
+            {stockSummary.packagedStock}
           </div>
           <p className="text-xs text-indigo-700 font-medium mt-1">
             Pre-packed combo packages ready for dispatch
@@ -329,7 +342,7 @@ export const PreparationPage: React.FC = () => {
             </span>
           </div>
           <div className="text-3xl font-black text-amber-950 font-mono">
-            {totalShelfStock}
+            {stockSummary.shelfStock}
           </div>
           <p className="text-xs text-amber-700 font-medium mt-1">
             Open books currently resting on shelves
@@ -348,10 +361,10 @@ export const PreparationPage: React.FC = () => {
             </span>
           </div>
           <div className="text-3xl font-black text-emerald-950 font-mono">
-            {totalStockAll}
+            {stockSummary.totalAvailableStock}
           </div>
-          <p className="text-xs text-emerald-700 font-medium mt-1">
-            Shelf ({totalShelfStock}) + Packaged ({totalPackagedSets}) = Total {totalStockAll}
+          <p className="text-xs text-emerald-700 font-medium mt-1 font-mono">
+            Shelf ({stockSummary.shelfStock}) + Packaged ({stockSummary.packagedStock}) = Total {stockSummary.totalAvailableStock}
           </p>
         </div>
 

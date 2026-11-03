@@ -90,9 +90,9 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
         });
       }
 
-      const totalBookAvailability = pData.books.length > 0 ? (minBookStock === 999999 ? 0 : minBookStock) : 0;
-      // Shelf stock = Total available stock minus what's currently in packaged stock
-      const shelfStock = Math.max(0, totalBookAvailability - packagedStock);
+      const packableSets = pData.books.length > 0 ? (minBookStock === 999999 ? 0 : minBookStock) : 0;
+      const totalBooksCopies = booksDetail.reduce((acc, b) => acc + (b.availableQuantity || 0), 0);
+      const shelfStock = Math.max(0, packableSets - packagedStock);
       const totalAvailableStock = shelfStock + packagedStock;
 
       resultList.push({
@@ -100,6 +100,8 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
         productName: pData.productName,
         books: booksDetail,
         totalBooksCount: booksDetail.length,
+        packableSets,
+        totalBooksCopies,
         packagedStock,
         shelfStock,
         totalAvailableStock,
@@ -108,9 +110,18 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
       });
     }
 
+    const totalPackagedSets = preparations.reduce((acc, p) => acc + (p.packagedStock || 0), 0);
+    const totalWarehouseAvailable = allBookStocks.reduce((acc, b) => acc + (b.availableQuantity || 0), 0);
+    const totalShelfStock = Math.max(0, totalWarehouseAvailable - totalPackagedSets);
+
     return successResponse(res, 'Preparation products fetched successfully', {
       products: resultList,
       totalCount: resultList.length,
+      summary: {
+        totalAvailableStock: totalWarehouseAvailable,
+        shelfStock: totalShelfStock,
+        packagedStock: totalPackagedSets,
+      },
     });
   } catch (error) {
     next(error);
