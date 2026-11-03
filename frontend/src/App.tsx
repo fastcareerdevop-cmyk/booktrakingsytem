@@ -24,6 +24,8 @@ import { PendingStockPage } from './pages/stock/PendingStockPage';
 
 // Common Pages
 import { OutgoingOrdersPage } from './pages/common/OutgoingOrdersPage';
+import { OutgoingOrdersPage2 } from './pages/common/OutgoingOrdersPage2';
+import { PreparationPage } from './pages/preparation/PreparationPage';
 import { OrderDetailPage } from './pages/common/OrderDetailPage';
 import { MobileScannerPage } from './pages/MobileScannerPage';
 
@@ -101,6 +103,8 @@ export const App: React.FC = () => {
               <Route path="orders" element={<AllOrdersPage />} />
               <Route path="orders/:id" element={<OrderDetailPage />} />
               <Route path="outgoing-orders" element={<OutgoingOrdersPage />} />
+              <Route path="outgoing-orders-2" element={<OutgoingOrdersPage2 />} />
+              <Route path="preparation" element={<PreparationPage />} />
               <Route path="invert" element={<InvertStockPage />} />
               <Route path="available-stock" element={<AvailableStockPage />} />
               <Route path="pending-stock" element={<PendingStockPage />} />
@@ -125,6 +129,8 @@ export const App: React.FC = () => {
             >
               <Route path="dashboard" element={<EmployeeDashboardPage />} />
               <Route path="outgoing-orders" element={<OutgoingOrdersPage />} />
+              <Route path="outgoing-orders-2" element={<OutgoingOrdersPage2 />} />
+              <Route path="preparation" element={<PreparationPage />} />
               <Route path="invert" element={<InvertStockPage />} />
               <Route path="available-stock" element={<AvailableStockPage />} />
               <Route path="pending-stock" element={<PendingStockPage />} />
