@@ -4,6 +4,7 @@ import { BookStock, IBookStock } from '../models/BookStock';
 import { StockInward } from '../models/StockInward';
 import { PendingBook } from '../models/PendingBook';
 import { ProductCatalog } from '../models/ProductCatalog';
+import { PackagePreparation } from '../models/PackagePreparation';
 import { Order } from '../models/Order';
 import { DispatchLog } from '../models/DispatchLog';
 import { AuditLog } from '../models/AuditLog';
@@ -191,7 +192,7 @@ export async function getAvailableStock(params: GetAvailableStockParams) {
   const sortField = params.sortBy || 'availableQuantity';
   const sort: any = { [sortField]: sortDirection };
 
-  const [books, totalMatching, summaryAgg] = await Promise.all([
+  const [books, totalMatching, summaryAgg, preparations, catalogProducts] = await Promise.all([
     BookStock.find(query).sort(sort).skip(skip).limit(limit).lean(),
     BookStock.countDocuments(query),
     BookStock.aggregate([
@@ -227,6 +228,8 @@ export async function getAvailableStock(params: GetAvailableStockParams) {
         },
       },
     ]),
+    PackagePreparation.find({ packagedStock: { $gt: 0 } }).lean(),
+    ProductCatalog.find({}).lean(),
   ]);
 
   const summary = summaryAgg[0] || {
@@ -239,6 +242,49 @@ export async function getAvailableStock(params: GetAvailableStockParams) {
     inStockTitles: 0,
   };
 
+  // Build mapping of bookCode -> packaged quantity locked inside ready packages
+  const catalogMap = new Map<string, string[]>();
+  for (const cp of catalogProducts) {
+    if (cp.productCode && cp.books) {
+      catalogMap.set(cp.productCode.toUpperCase().trim(), cp.books.map((b: any) => normalizeCode(b)));
+    }
+  }
+
+  const bookPackagedMap = new Map<string, number>();
+  for (const prep of preparations) {
+    const pQty = prep.packagedStock || 0;
+    if (pQty <= 0) continue;
+
+    const pCode = (prep.productCode || '').toUpperCase().trim();
+    let booksForProduct: string[] = [];
+    if (prep.books && prep.books.length > 0) {
+      booksForProduct = prep.books.map((b: any) => normalizeCode(b.bookCode));
+    } else if (catalogMap.has(pCode)) {
+      booksForProduct = catalogMap.get(pCode) || [];
+    }
+
+    for (const bCode of booksForProduct) {
+      const clean = normalizeCode(bCode);
+      bookPackagedMap.set(clean, (bookPackagedMap.get(clean) || 0) + pQty);
+    }
+  }
+
+  // Calculate overall warehouse In-Shelf and In-Packet totals across all books
+  let totalInPacket = 0;
+  const allStocksForTotals = await BookStock.find({}, { bookCode: 1, availableQuantity: 1 }).lean();
+  for (const bs of allStocksForTotals) {
+    if (bs.availableQuantity > 0) {
+      const clean = normalizeCode(bs.bookCode);
+      const pQty = bookPackagedMap.get(clean) || 0;
+      totalInPacket += Math.min(bs.availableQuantity, pQty);
+    }
+  }
+  const totalAvailable = summary.totalAvailableCopies || 0;
+  const totalInShelf = Math.max(0, totalAvailable - totalInPacket);
+
+  summary.totalInShelf = totalInShelf;
+  summary.totalInPacket = totalInPacket;
+
   const formattedBooks = books.map((b: any) => {
     let stockStatus: 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK' = 'IN_STOCK';
     if (b.availableQuantity <= 0) {
@@ -246,6 +292,11 @@ export async function getAvailableStock(params: GetAvailableStockParams) {
     } else if (b.availableQuantity <= (b.lowStockThreshold || 10)) {
       stockStatus = 'LOW_STOCK';
     }
+
+    const cleanBCode = normalizeCode(b.bookCode);
+    const packetNeeded = bookPackagedMap.get(cleanBCode) || 0;
+    const inPacket = b.availableQuantity > 0 ? Math.min(b.availableQuantity, packetNeeded) : 0;
+    const inShelf = b.availableQuantity > 0 ? Math.max(0, b.availableQuantity - inPacket) : (b.availableQuantity || 0);
 
     return {
       id: b._id.toString(),
@@ -255,6 +306,8 @@ export async function getAvailableStock(params: GetAvailableStockParams) {
       totalInward: b.totalInward,
       totalDispatched: b.totalDispatched,
       availableQuantity: b.availableQuantity,
+      inShelf,
+      inPacket,
       lowStockThreshold: b.lowStockThreshold || 10,
       stockStatus,
       lastRestockedAt: b.lastRestockedAt,
@@ -631,6 +684,8 @@ export async function exportStockExcel(): Promise<Buffer> {
     { header: 'Total Inward', key: 'totalInward', width: 15 },
     { header: 'Total Dispatched', key: 'totalDispatched', width: 16 },
     { header: 'Available Stock', key: 'availableQuantity', width: 16 },
+    { header: 'In Shelf (खुली)', key: 'inShelf', width: 16 },
+    { header: 'In Packet (पैक्ड)', key: 'inPacket', width: 16 },
     { header: 'Stock Status', key: 'stockStatus', width: 16 },
     { header: 'Last Restocked Date & Time', key: 'lastRestockedAt', width: 26 },
   ];
@@ -642,12 +697,45 @@ export async function exportStockExcel(): Promise<Buffer> {
     fgColor: { argb: 'FF1E293B' },
   };
 
-  const stocks = await BookStock.find().sort({ availableQuantity: 1 }).lean();
+  const [stocks, preparations, catalogProducts] = await Promise.all([
+    BookStock.find().sort({ availableQuantity: 1 }).lean(),
+    PackagePreparation.find({ packagedStock: { $gt: 0 } }).lean(),
+    ProductCatalog.find({}).lean(),
+  ]);
+
+  const catalogMap = new Map<string, string[]>();
+  for (const cp of catalogProducts) {
+    if (cp.productCode && cp.books) {
+      catalogMap.set(cp.productCode.toUpperCase().trim(), cp.books.map((b: any) => normalizeCode(b)));
+    }
+  }
+
+  const bookPackagedMap = new Map<string, number>();
+  for (const prep of preparations) {
+    const pQty = prep.packagedStock || 0;
+    if (pQty <= 0) continue;
+    const pCode = (prep.productCode || '').toUpperCase().trim();
+    let booksForProduct: string[] = [];
+    if (prep.books && prep.books.length > 0) {
+      booksForProduct = prep.books.map((b: any) => normalizeCode(b.bookCode));
+    } else if (catalogMap.has(pCode)) {
+      booksForProduct = catalogMap.get(pCode) || [];
+    }
+    for (const bCode of booksForProduct) {
+      const clean = normalizeCode(bCode);
+      bookPackagedMap.set(clean, (bookPackagedMap.get(clean) || 0) + pQty);
+    }
+  }
 
   stocks.forEach((s) => {
     let status = 'In Stock';
     if (s.availableQuantity <= 0) status = 'Out of Stock';
     else if (s.availableQuantity <= (s.lowStockThreshold || 10)) status = 'Low Stock';
+
+    const cleanBCode = normalizeCode(s.bookCode);
+    const packetNeeded = bookPackagedMap.get(cleanBCode) || 0;
+    const inPacket = s.availableQuantity > 0 ? Math.min(s.availableQuantity, packetNeeded) : 0;
+    const inShelf = s.availableQuantity > 0 ? Math.max(0, s.availableQuantity - inPacket) : (s.availableQuantity || 0);
 
     sheet.addRow({
       bookCode: s.bookCode,
@@ -655,6 +743,8 @@ export async function exportStockExcel(): Promise<Buffer> {
       totalInward: s.totalInward,
       totalDispatched: s.totalDispatched,
       availableQuantity: s.availableQuantity,
+      inShelf,
+      inPacket,
       stockStatus: status,
       lastRestockedAt: s.lastRestockedAt ? new Date(s.lastRestockedAt).toLocaleString('en-IN') : 'N/A',
     });

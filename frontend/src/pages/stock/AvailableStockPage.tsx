@@ -22,6 +22,7 @@ import {
   ArrowUpDown,
   BookOpen,
   Truck,
+  Package,
   PackagePlus,
   Clock,
   Calendar,
@@ -48,6 +49,8 @@ export const AvailableStockPage: React.FC = () => {
   const [summary, setSummary] = useState<any>({
     totalTitles: 0,
     totalAvailableCopies: 0,
+    totalInShelf: 0,
+    totalInPacket: 0,
     totalInwardCopies: 0,
     totalDispatchedCopies: 0,
     outOfStockTitles: 0,
@@ -366,63 +369,122 @@ export const AvailableStockPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── KPI Metric Cards ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {/* Total Available Copies */}
-        <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-xs">
-          <p className="text-xs font-medium text-emerald-100">Live Available Books</p>
-          <p className="text-2xl font-black mt-1">{summary.totalAvailableCopies || 0}</p>
-          <p className="text-[11px] text-emerald-100/90 mt-0.5">Ready for dispatch</p>
+      {/* ─── KPI Metric Cards (8 Uniform Equal-Sized Cards) ───────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Card 1: Total Available Copies */}
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 truncate">Total Available Books</span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+              <Boxes size={15} />
+            </div>
+          </div>
+          <div>
+            <p className="text-2xl font-black text-emerald-700 tracking-tight">{summary.totalAvailableCopies || 0}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Total live warehouse stock</p>
+          </div>
         </div>
 
-        {/* Total Book Titles */}
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
+        {/* Card 2: In Shelf (खुली) */}
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-500">Total Book Titles</p>
-            <BookOpen size={16} className="text-red-500" />
+            <span className="text-xs font-semibold text-slate-500 truncate">In Shelf (खुली प्रतियां)</span>
+            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+              <BookOpen size={15} />
+            </div>
           </div>
-          <p className="text-2xl font-black text-slate-900 mt-1">{summary.totalTitles || 0}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Unique book SKUs</p>
+          <div>
+            <p className="text-2xl font-black text-amber-700 tracking-tight">
+              {summary.totalInShelf !== undefined
+                ? summary.totalInShelf
+                : Math.max(0, (summary.totalAvailableCopies || 0) - (summary.totalInPacket || 0))}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Open loose copies on rack</p>
+          </div>
         </div>
 
-        {/* In Stock Titles */}
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
+        {/* Card 3: In Packet (पैक्ड) */}
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-500">In Stock Titles</p>
-            <CheckCircle2 size={16} className="text-emerald-500" />
+            <span className="text-xs font-semibold text-slate-500 truncate">In Packet (पैक्ड प्रतियां)</span>
+            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <Package size={15} />
+            </div>
           </div>
-          <p className="text-2xl font-black text-emerald-600 mt-1">{summary.inStockTitles || 0}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">&gt; 10 copies in stock</p>
+          <div>
+            <p className="text-2xl font-black text-indigo-700 tracking-tight">{summary.totalInPacket || 0}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Pre-packaged ready copies</p>
+          </div>
         </div>
 
-        {/* Low Stock Titles */}
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
+        {/* Card 4: Total Book Titles */}
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-500">Low Stock Titles</p>
-            <AlertTriangle size={16} className="text-amber-500" />
+            <span className="text-xs font-semibold text-slate-500 truncate">Total Book Titles</span>
+            <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 border border-slate-200">
+              <BookOpen size={15} />
+            </div>
           </div>
-          <p className="text-2xl font-black text-amber-600 mt-1">{summary.lowStockTitles || 0}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">1 to 10 copies left</p>
+          <div>
+            <p className="text-2xl font-black text-slate-900 tracking-tight">{summary.totalTitles || 0}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Unique book SKUs registered</p>
+          </div>
         </div>
 
-        {/* Out of Stock Titles */}
-        <div className="p-4 rounded-xl bg-white border border-rose-200 bg-rose-50/40 shadow-2xs">
+        {/* Card 5: In Stock Titles */}
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-rose-700">Out of Stock</p>
-            <XCircle size={16} className="text-rose-500" />
+            <span className="text-xs font-semibold text-slate-500 truncate">In Stock Titles</span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+              <CheckCircle2 size={15} />
+            </div>
           </div>
-          <p className="text-2xl font-black text-rose-600 mt-1">{summary.outOfStockTitles || 0}</p>
-          <p className="text-[11px] text-rose-700/80 font-medium mt-0.5">0 ya negative balance (scan record hua)</p>
+          <div>
+            <p className="text-2xl font-black text-emerald-600 tracking-tight">{summary.inStockTitles || 0}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">&gt; 10 copies in stock</p>
+          </div>
         </div>
 
-        {/* Total Dispatched */}
-        <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
+        {/* Card 6: Low Stock Titles */}
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-500">Total Dispatched</p>
-            <Truck size={16} className="text-purple-500" />
+            <span className="text-xs font-semibold text-slate-500 truncate">Low Stock Titles</span>
+            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+              <AlertTriangle size={15} />
+            </div>
           </div>
-          <p className="text-2xl font-black text-purple-700 mt-1">{summary.totalDispatchedCopies || 0}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Dispatched copies</p>
+          <div>
+            <p className="text-2xl font-black text-amber-600 tracking-tight">{summary.lowStockTitles || 0}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">1 to 10 copies left</p>
+          </div>
+        </div>
+
+        {/* Card 7: Out of Stock */}
+        <div className="p-3.5 rounded-xl bg-white border border-rose-200 bg-rose-50/20 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-700 truncate">Out of Stock</span>
+            <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 border border-rose-200">
+              <XCircle size={15} />
+            </div>
+          </div>
+          <div>
+            <p className="text-2xl font-black text-rose-600 tracking-tight">{summary.outOfStockTitles || 0}</p>
+            <p className="text-[11px] text-rose-600/80 mt-0.5 truncate">0 ya negative balance</p>
+          </div>
+        </div>
+
+        {/* Card 8: Total Dispatched */}
+        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500 truncate">Total Dispatched</span>
+            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+              <Truck size={15} />
+            </div>
+          </div>
+          <div>
+            <p className="text-2xl font-black text-purple-700 tracking-tight">{summary.totalDispatchedCopies || 0}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Dispatched copies lifetime</p>
+          </div>
         </div>
       </div>
 
@@ -577,9 +639,11 @@ export const AvailableStockPage: React.FC = () => {
                   <th className="py-3 px-3 text-center">Total Inward</th>
                   <th className="py-3 px-3 text-center">Total Dispatched</th>
                   <th className="py-3 px-3 text-center font-black">Available Stock</th>
+                  <th className="py-3 px-3 text-center font-bold text-amber-300">In Shelf (खुली)</th>
+                  <th className="py-3 px-3 text-center font-bold text-indigo-300">In Packet (पैक्ड)</th>
                   <th className="py-3 px-3 text-center">Status</th>
                   <th className="py-3 px-3">Last Restocked</th>
-                  <th className="py-3 px-3 text-right">Action</th>
+                  <th className="py-3 px-3 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -625,6 +689,22 @@ export const AvailableStockPage: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3 px-3 text-center">
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          {b.inShelf !== undefined ? b.inShelf : b.availableQuantity} copies
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                            (b.inPacket || 0) > 0
+                              ? 'bg-indigo-100 text-indigo-900 border border-indigo-300'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200'
+                          }`}
+                        >
+                          {b.inPacket || 0} copies
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-center">
                         {isOutOfStock ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
                             <XCircle size={12} />
@@ -660,47 +740,43 @@ export const AvailableStockPage: React.FC = () => {
                           <span className="text-slate-300">-</span>
                         )}
                       </td>
-                      <td className="py-3 px-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={() => handleOpenEditModal(b)}
-                            className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 bg-amber-50 text-amber-800 hover:bg-amber-600 hover:text-white rounded border border-amber-200 transition-colors cursor-pointer"
-                            title="Edit Book Code, Name, Product Combo & Stock Details"
+                            className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-600 hover:text-white border border-amber-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-105"
+                            title="Edit Book Details (कोड, नाम, प्रोडक्ट)"
                           >
-                            <Edit3 size={12} />
-                            <span>Edit</span>
+                            <Edit3 size={14} />
                           </button>
                           <button
                             onClick={() => setHistoryModalBook(b)}
-                            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white rounded border border-blue-200 transition-colors cursor-pointer shadow-2xs"
-                            title="View complete history of this book (कब-कब कितनी आई, कितनी गई)"
+                            className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-105"
+                            title="View Book History (कब-कब कितनी आई/गई)"
                           >
-                            <History size={13} />
-                            <span>History</span>
+                            <History size={14} />
                           </button>
                           <button
                             onClick={() => openAdjustModal(b, 'SET')}
-                            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded border border-indigo-200 transition-colors cursor-pointer"
-                            title="Stock update / kam-jyada karein (Set exact, Reduce or Add)"
+                            className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white border border-indigo-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-105"
+                            title="Update / कम-ज्यादा Stock (Set exact, Reduce or Add)"
                           >
-                            <Sliders size={13} />
-                            <span>Update / कम-ज्यादा</span>
+                            <Sliders size={14} />
                           </button>
                           <button
                             onClick={() => setQuickRestockBook(b)}
-                            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white rounded border border-emerald-200 transition-colors cursor-pointer"
-                            title="Quick Inward stock for this book"
+                            className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-105"
+                            title="Quick Inward (+ Add Stock)"
                           >
-                            <PlusCircle size={13} />
-                            <span>+ Add</span>
+                            <PlusCircle size={14} />
                           </button>
                           <button
                             onClick={() => initiateDelete(b)}
                             disabled={b.availableQuantity !== 0}
-                            className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded border transition-colors ${
+                            className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all ${
                               b.availableQuantity === 0
-                                ? 'bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white border-rose-200 cursor-pointer'
-                                : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                                ? 'bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white border-rose-200 cursor-pointer shadow-2xs hover:scale-105'
+                                : 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed opacity-50'
                             }`}
                             title={
                               b.availableQuantity === 0
@@ -708,8 +784,7 @@ export const AvailableStockPage: React.FC = () => {
                                 : `Reconcile stock to 0 before deleting (Current: ${b.availableQuantity})`
                             }
                           >
-                            <Trash2 size={13} />
-                            <span>Delete</span>
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
