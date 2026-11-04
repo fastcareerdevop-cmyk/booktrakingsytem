@@ -28,6 +28,9 @@ import {
   Calendar,
   Trash2,
   History,
+  X,
+  ExternalLink,
+  Filter,
 } from 'lucide-react';
 import { BookStockHistoryModal } from '../../components/stock/BookStockHistoryModal';
 
@@ -86,6 +89,52 @@ export const AvailableStockPage: React.FC = () => {
 
   // Book Stock History Modal
   const [historyModalBook, setHistoryModalBook] = useState<any>(null);
+
+  // Metric Card Details Modal State
+  const [selectedMetricModal, setSelectedMetricModal] = useState<string | null>(null);
+  const [metricModalData, setMetricModalData] = useState<any>(null);
+  const [isMetricModalLoading, setIsMetricModalLoading] = useState<boolean>(false);
+
+  const handleOpenMetricModal = async (metricType: string) => {
+    setSelectedMetricModal(metricType);
+    setMetricModalData(null);
+    setIsMetricModalLoading(true);
+
+    try {
+      if (metricType === 'IN_PACKET') {
+        const res = await api.get('/preparation/products');
+        if (res.data.success) {
+          const pkged = (res.data.data.products || []).filter((p: any) => (p.packagedStock || 0) > 0);
+          setMetricModalData(pkged);
+        }
+      } else if (metricType === 'IN_SHELF') {
+        const res = await api.get('/stock/available?limit=100&status=ALL&sortBy=availableQuantity&sortOrder=desc');
+        if (res.data.success) {
+          const shelfBooks = (res.data.data.books || []).filter((b: any) => (b.inShelf ?? b.availableQuantity) > 0);
+          setMetricModalData(shelfBooks);
+        }
+      } else if (metricType === 'OUT_OF_STOCK') {
+        const res = await api.get('/stock/available?limit=100&status=OUT_OF_STOCK');
+        if (res.data.success) {
+          setMetricModalData(res.data.data.books || []);
+        }
+      } else if (metricType === 'LOW_STOCK') {
+        const res = await api.get('/stock/available?limit=100&status=LOW_STOCK');
+        if (res.data.success) {
+          setMetricModalData(res.data.data.books || []);
+        }
+      } else if (metricType === 'IN_STOCK') {
+        const res = await api.get('/stock/available?limit=100&status=IN_STOCK');
+        if (res.data.success) {
+          setMetricModalData(res.data.data.books || []);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load metric details:', err);
+    } finally {
+      setIsMetricModalLoading(false);
+    }
+  };
 
   const fetchStock = async (targetPage = 1) => {
     setIsLoading(true);
@@ -369,121 +418,183 @@ export const AvailableStockPage: React.FC = () => {
         </div>
       </div>
 
-      {/* ─── KPI Metric Cards (8 Uniform Equal-Sized Cards) ───────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* ─── KPI Metric Cards (8 Uniform Equal-Sized Cards in 1 Row) ───────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
         {/* Card 1: Total Available Copies */}
-        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+        <div
+          onClick={() => handleOpenMetricModal('TOTAL_AVAILABLE')}
+          className="p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[84px] hover:border-emerald-500 hover:shadow-xs hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+          title="Click to view Total Available Stock details"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 truncate">Total Available Books</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-              <Boxes size={15} />
+            <span className="text-[10.5px] font-semibold text-slate-500 truncate group-hover:text-emerald-700 transition-colors">
+              Available Books
+            </span>
+            <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+              <Boxes size={12} />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-black text-emerald-700 tracking-tight">{summary.totalAvailableCopies || 0}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Total live warehouse stock</p>
+            <p className="text-lg font-black text-emerald-700 tracking-tight leading-tight">
+              {summary.totalAvailableCopies || 0}
+            </p>
+            <p className="text-[9.5px] text-slate-400 mt-0.5 truncate">Total live stock</p>
           </div>
         </div>
 
         {/* Card 2: In Shelf (खुली) */}
-        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+        <div
+          onClick={() => handleOpenMetricModal('IN_SHELF')}
+          className="p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[84px] hover:border-amber-500 hover:shadow-xs hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+          title="Click to view In-Shelf (Loose Books) details"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 truncate">In Shelf (खुली प्रतियां)</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
-              <BookOpen size={15} />
+            <span className="text-[10.5px] font-semibold text-slate-500 truncate group-hover:text-amber-700 transition-colors">
+              In Shelf (खुली)
+            </span>
+            <div className="w-5 h-5 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+              <BookOpen size={12} />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-black text-amber-700 tracking-tight">
+            <p className="text-lg font-black text-amber-700 tracking-tight leading-tight">
               {summary.totalInShelf !== undefined
                 ? summary.totalInShelf
                 : Math.max(0, (summary.totalAvailableCopies || 0) - (summary.totalInPacket || 0))}
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Open loose copies on rack</p>
+            <p className="text-[9.5px] text-slate-400 mt-0.5 truncate">Open loose copies</p>
           </div>
         </div>
 
         {/* Card 3: In Packet (पैक्ड) */}
-        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+        <div
+          onClick={() => handleOpenMetricModal('IN_PACKET')}
+          className="p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[84px] hover:border-indigo-500 hover:shadow-xs hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+          title="Click to view Pre-Packaged Packet details"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 truncate">In Packet (पैक्ड प्रतियां)</span>
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
-              <Package size={15} />
+            <span className="text-[10.5px] font-semibold text-slate-500 truncate group-hover:text-indigo-700 transition-colors">
+              In Packet (पैक्ड)
+            </span>
+            <div className="w-5 h-5 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+              <Package size={12} />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-black text-indigo-700 tracking-tight">{summary.totalInPacket || 0}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Pre-packaged ready copies</p>
+            <p className="text-lg font-black text-indigo-700 tracking-tight leading-tight">
+              {summary.totalInPacket || 0}
+            </p>
+            <p className="text-[9.5px] text-slate-400 mt-0.5 truncate">Pre-packaged copies</p>
           </div>
         </div>
 
         {/* Card 4: Total Book Titles */}
-        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+        <div
+          onClick={() => handleOpenMetricModal('TOTAL_TITLES')}
+          className="p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[84px] hover:border-slate-400 hover:shadow-xs hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+          title="Click to view All Book Titles details"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 truncate">Total Book Titles</span>
-            <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 border border-slate-200">
-              <BookOpen size={15} />
+            <span className="text-[10.5px] font-semibold text-slate-500 truncate group-hover:text-slate-900 transition-colors">
+              Book Titles
+            </span>
+            <div className="w-5 h-5 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 border border-slate-200">
+              <BookOpen size={12} />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-black text-slate-900 tracking-tight">{summary.totalTitles || 0}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Unique book SKUs registered</p>
+            <p className="text-lg font-black text-slate-900 tracking-tight leading-tight">
+              {summary.totalTitles || 0}
+            </p>
+            <p className="text-[9.5px] text-slate-400 mt-0.5 truncate">Registered SKUs</p>
           </div>
         </div>
 
         {/* Card 5: In Stock Titles */}
-        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+        <div
+          onClick={() => handleOpenMetricModal('IN_STOCK')}
+          className="p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[84px] hover:border-emerald-500 hover:shadow-xs hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+          title="Click to view In-Stock Titles details"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 truncate">In Stock Titles</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
-              <CheckCircle2 size={15} />
+            <span className="text-[10.5px] font-semibold text-slate-500 truncate group-hover:text-emerald-700 transition-colors">
+              In Stock
+            </span>
+            <div className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+              <CheckCircle2 size={12} />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-black text-emerald-600 tracking-tight">{summary.inStockTitles || 0}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">&gt; 10 copies in stock</p>
+            <p className="text-lg font-black text-emerald-600 tracking-tight leading-tight">
+              {summary.inStockTitles || 0}
+            </p>
+            <p className="text-[9.5px] text-slate-400 mt-0.5 truncate">&gt; 10 copies left</p>
           </div>
         </div>
 
         {/* Card 6: Low Stock Titles */}
-        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+        <div
+          onClick={() => handleOpenMetricModal('LOW_STOCK')}
+          className="p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[84px] hover:border-amber-500 hover:shadow-xs hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+          title="Click to view Low Stock alert details"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 truncate">Low Stock Titles</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
-              <AlertTriangle size={15} />
+            <span className="text-[10.5px] font-semibold text-slate-500 truncate group-hover:text-amber-700 transition-colors">
+              Low Stock
+            </span>
+            <div className="w-5 h-5 rounded-md bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+              <AlertTriangle size={12} />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-black text-amber-600 tracking-tight">{summary.lowStockTitles || 0}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">1 to 10 copies left</p>
+            <p className="text-lg font-black text-amber-600 tracking-tight leading-tight">
+              {summary.lowStockTitles || 0}
+            </p>
+            <p className="text-[9.5px] text-slate-400 mt-0.5 truncate">1 to 10 copies left</p>
           </div>
         </div>
 
         {/* Card 7: Out of Stock */}
-        <div className="p-3.5 rounded-xl bg-white border border-rose-200 bg-rose-50/20 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+        <div
+          onClick={() => handleOpenMetricModal('OUT_OF_STOCK')}
+          className="p-2.5 rounded-xl bg-white border border-rose-200 bg-rose-50/20 shadow-2xs flex flex-col justify-between h-[84px] hover:border-rose-500 hover:shadow-xs hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+          title="Click to view Out of Stock alert details"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-700 truncate">Out of Stock</span>
-            <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 border border-rose-200">
-              <XCircle size={15} />
+            <span className="text-[10.5px] font-bold text-rose-700 truncate group-hover:text-rose-800 transition-colors">
+              Out of Stock
+            </span>
+            <div className="w-5 h-5 rounded-md bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 border border-rose-200">
+              <XCircle size={12} />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-black text-rose-600 tracking-tight">{summary.outOfStockTitles || 0}</p>
-            <p className="text-[11px] text-rose-600/80 mt-0.5 truncate">0 ya negative balance</p>
+            <p className="text-lg font-black text-rose-600 tracking-tight leading-tight">
+              {summary.outOfStockTitles || 0}
+            </p>
+            <p className="text-[9.5px] text-rose-600/80 mt-0.5 truncate">0 ya negative balance</p>
           </div>
         </div>
 
         {/* Card 8: Total Dispatched */}
-        <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[104px] hover:shadow-xs transition-shadow">
+        <div
+          onClick={() => handleOpenMetricModal('TOTAL_DISPATCHED')}
+          className="p-2.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between h-[84px] hover:border-purple-500 hover:shadow-xs hover:-translate-y-0.5 active:scale-[0.98] transition-all cursor-pointer group"
+          title="Click to view Total Dispatched details"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 truncate">Total Dispatched</span>
-            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
-              <Truck size={15} />
+            <span className="text-[10.5px] font-semibold text-slate-500 truncate group-hover:text-purple-700 transition-colors">
+              Dispatched
+            </span>
+            <div className="w-5 h-5 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100">
+              <Truck size={12} />
             </div>
           </div>
           <div>
-            <p className="text-2xl font-black text-purple-700 tracking-tight">{summary.totalDispatchedCopies || 0}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">Dispatched copies lifetime</p>
+            <p className="text-lg font-black text-purple-700 tracking-tight leading-tight">
+              {summary.totalDispatchedCopies || 0}
+            </p>
+            <p className="text-[9.5px] text-slate-400 mt-0.5 truncate">Dispatched lifetime</p>
           </div>
         </div>
       </div>
@@ -1373,6 +1484,445 @@ export const AvailableStockPage: React.FC = () => {
               >
                 {isDeleting ? <LoadingSpinner /> : <><Trash2 size={14} /><span>Yes, Delete (डिलीट करें)</span></>}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Metric Card Details Modal ────────────────────────────────────────── */}
+      {selectedMetricModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-5 shadow-2xl border border-slate-200 relative overflow-hidden animate-in zoom-in-95 duration-200 text-slate-800 flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                {selectedMetricModal === 'TOTAL_AVAILABLE' && (
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200">
+                    <Boxes size={18} />
+                  </div>
+                )}
+                {selectedMetricModal === 'IN_SHELF' && (
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+                    <BookOpen size={18} />
+                  </div>
+                )}
+                {selectedMetricModal === 'IN_PACKET' && (
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-200">
+                    <Package size={18} />
+                  </div>
+                )}
+                {selectedMetricModal === 'TOTAL_TITLES' && (
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-300">
+                    <BookOpen size={18} />
+                  </div>
+                )}
+                {selectedMetricModal === 'IN_STOCK' && (
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200">
+                    <CheckCircle2 size={18} />
+                  </div>
+                )}
+                {selectedMetricModal === 'LOW_STOCK' && (
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+                    <AlertTriangle size={18} />
+                  </div>
+                )}
+                {selectedMetricModal === 'OUT_OF_STOCK' && (
+                  <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-200">
+                    <XCircle size={18} />
+                  </div>
+                )}
+                {selectedMetricModal === 'TOTAL_DISPATCHED' && (
+                  <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-200">
+                    <Truck size={18} />
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {selectedMetricModal === 'TOTAL_AVAILABLE' && 'Total Available Stock Details (कुल उपलब्ध स्टॉक)'}
+                    {selectedMetricModal === 'IN_SHELF' && 'In Shelf / Loose Stock Details (खुली प्रतियां)'}
+                    {selectedMetricModal === 'IN_PACKET' && 'In Packet / Pre-Packaged Details (पैक्ड पार्सल स्टॉक)'}
+                    {selectedMetricModal === 'TOTAL_TITLES' && 'Registered Book SKUs & Titles (पंजीकृत किताबें)'}
+                    {selectedMetricModal === 'IN_STOCK' && 'In Stock Titles (> 10 Copies Available)'}
+                    {selectedMetricModal === 'LOW_STOCK' && 'Low Stock Warning (1 to 10 Copies Left)'}
+                    {selectedMetricModal === 'OUT_OF_STOCK' && 'Out of Stock Alert (0 या नेगेटिव स्टॉक)'}
+                    {selectedMetricModal === 'TOTAL_DISPATCHED' && 'Total Dispatched History Overview'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Live warehouse inventory status & detailed breakdown
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setSelectedMetricModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body with Scroll */}
+            <div className="py-4 overflow-y-auto flex-1 space-y-4 pr-1 text-xs">
+              {isMetricModalLoading ? (
+                <div className="py-12 text-center text-slate-400">
+                  <LoadingSpinner />
+                  <p className="mt-2 text-xs">Details load ho rahi hain...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Content for TOTAL_AVAILABLE */}
+                  {selectedMetricModal === 'TOTAL_AVAILABLE' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-3 gap-2.5">
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+                          <span className="text-[11px] font-medium text-emerald-800">Total Live Books</span>
+                          <p className="text-2xl font-black text-emerald-900 mt-0.5">{summary.totalAvailableCopies || 0}</p>
+                          <span className="text-[10px] text-emerald-700">Warehouse Me Kul Kitabein</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-center">
+                          <span className="text-[11px] font-medium text-amber-800">In Shelf (खुली)</span>
+                          <p className="text-2xl font-black text-amber-900 mt-0.5">
+                            {summary.totalInShelf !== undefined ? summary.totalInShelf : Math.max(0, (summary.totalAvailableCopies || 0) - (summary.totalInPacket || 0))}
+                          </p>
+                          <span className="text-[10px] text-amber-700">Rack par open copies</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-center">
+                          <span className="text-[11px] font-medium text-indigo-800">In Packet (पैक्ड)</span>
+                          <p className="text-2xl font-black text-indigo-900 mt-0.5">{summary.totalInPacket || 0}</p>
+                          <span className="text-[10px] text-indigo-700">Pre-packed combo copies</span>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 leading-relaxed">
+                        💡 <strong>Formula:</strong> Total Available Books ({summary.totalAvailableCopies}) = Shelf Available ({summary.totalInShelf ?? Math.max(0, (summary.totalAvailableCopies || 0) - (summary.totalInPacket || 0))}) + In Packet ({summary.totalInPacket || 0}) copies. Jab naya stock inward hota hai to stock badhta hai, aur order dispatch hone par stock kam hota hai.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Content for IN_SHELF */}
+                  {selectedMetricModal === 'IN_SHELF' && (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-bold text-amber-900">Total Loose Shelf Copies</p>
+                          <p className="text-xl font-black text-amber-800 mt-0.5">
+                            {summary.totalInShelf !== undefined ? summary.totalInShelf : Math.max(0, (summary.totalAvailableCopies || 0) - (summary.totalInPacket || 0))} Copies
+                          </p>
+                        </div>
+                        <span className="text-[11px] bg-white text-amber-800 px-2.5 py-1 rounded-md border border-amber-200 font-semibold">
+                          Open Rack Stock
+                        </span>
+                      </div>
+
+                      <p className="text-slate-600 text-xs">
+                        Yeh kitabein warehouse shelf par khuli rakhi hui hain. Inhe kisi bhi custom packaging ya loose order ke liye dispatch kiya ja sakta hai.
+                      </p>
+
+                      <div className="border border-slate-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0">
+                            <tr>
+                              <th className="p-2">Book Code</th>
+                              <th className="p-2">Book Name</th>
+                              <th className="p-2 text-center">In Shelf</th>
+                              <th className="p-2 text-center">Total Avail</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {Array.isArray(metricModalData) && metricModalData.length > 0 ? (
+                              metricModalData.slice(0, 30).map((b: any) => (
+                                <tr key={b.id || b.bookCode} className="hover:bg-slate-50">
+                                  <td className="p-2 font-mono font-bold text-red-700">{b.bookCode}</td>
+                                  <td className="p-2 font-medium text-slate-800 truncate max-w-xs">{b.bookName}</td>
+                                  <td className="p-2 text-center font-bold text-amber-700">{b.inShelf ?? b.availableQuantity}</td>
+                                  <td className="p-2 text-center font-bold text-slate-700">{b.availableQuantity}</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={4} className="p-4 text-center text-slate-400">Loading shelf stock...</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Content for IN_PACKET */}
+                  {selectedMetricModal === 'IN_PACKET' && (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200 flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-bold text-indigo-900">Total Books Locked In Packets</p>
+                          <p className="text-xl font-black text-indigo-800 mt-0.5">{summary.totalInPacket || 0} Books Packaged</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedMetricModal(null);
+                            navigate('/admin/preparation');
+                          }}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1 shadow-2xs"
+                        >
+                          <span>Go to Preparation Station</span>
+                          <ExternalLink size={12} />
+                        </button>
+                      </div>
+
+                      <p className="text-slate-600 text-xs">
+                        Yeh combo product packages pehle se pack karke tayyar rakhe gaye hain. Order aane par inhe direct bina delay ke barcode scan karke bheja ja sakta hai.
+                      </p>
+
+                      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                        {Array.isArray(metricModalData) && metricModalData.length > 0 ? (
+                          metricModalData.map((p: any) => (
+                            <div key={p.productCode} className="p-3 rounded-xl border border-indigo-100 bg-indigo-50/30">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                                    {p.productCode}
+                                  </span>
+                                  <h4 className="font-bold text-slate-900 mt-1">{p.productName}</h4>
+                                </div>
+                                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-600 text-white">
+                                  {p.packagedStock} Sets Ready
+                                </span>
+                              </div>
+                              <div className="mt-2 pt-2 border-t border-indigo-100/60">
+                                <p className="text-[11px] font-semibold text-slate-600 mb-1">
+                                  Books in this package ({p.books?.length || 0} books per set):
+                                </p>
+                                <div className="space-y-0.5">
+                                  {(p.books || []).map((b: any, bIdx: number) => (
+                                    <div key={b.bookCode || bIdx} className="flex justify-between text-[11px] text-slate-700">
+                                      <span>• {b.bookName || b.bookCode}</span>
+                                      <span className="font-mono font-semibold text-indigo-900">
+                                        {p.packagedStock} copies ({b.bookCode})
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-xl">
+                            <Package size={24} className="mx-auto text-slate-300 mb-1" />
+                            <p className="font-semibold">Abhi koi combo package packed nahi hai</p>
+                            <p className="text-[11px] mt-0.5">Preparation page par jakar sets pack karein.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Content for TOTAL_TITLES */}
+                  {selectedMetricModal === 'TOTAL_TITLES' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                          <p className="text-xs font-semibold text-emerald-800">In Stock</p>
+                          <p className="text-xl font-bold text-emerald-900 mt-0.5">{summary.inStockTitles || 0}</p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                          <p className="text-xs font-semibold text-amber-800">Low Stock</p>
+                          <p className="text-xl font-bold text-amber-900 mt-0.5">{summary.lowStockTitles || 0}</p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                          <p className="text-xs font-semibold text-rose-800">Out of Stock</p>
+                          <p className="text-xl font-bold text-rose-900 mt-0.5">{summary.outOfStockTitles || 0}</p>
+                        </div>
+                      </div>
+                      <p className="text-slate-600 text-xs">
+                        Warehouse catalog me kul {summary.totalTitles || 0} unique book titles registered hain.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Content for IN_STOCK */}
+                  {selectedMetricModal === 'IN_STOCK' && (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-bold text-emerald-900">Safe Stock Level (&gt; 10 Copies)</p>
+                          <p className="text-xl font-black text-emerald-800 mt-0.5">{summary.inStockTitles || 0} Book Titles</p>
+                        </div>
+                        <span className="text-[11px] bg-white text-emerald-800 px-2.5 py-1 rounded-md border border-emerald-200 font-semibold">
+                          Healthy Stock
+                        </span>
+                      </div>
+                      <div className="border border-slate-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0">
+                            <tr>
+                              <th className="p-2">Book Code</th>
+                              <th className="p-2">Book Name</th>
+                              <th className="p-2 text-center">Available Stock</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {Array.isArray(metricModalData) && metricModalData.length > 0 ? (
+                              metricModalData.map((b: any) => (
+                                <tr key={b.id || b.bookCode} className="hover:bg-slate-50">
+                                  <td className="p-2 font-mono font-bold text-red-700">{b.bookCode}</td>
+                                  <td className="p-2 font-medium text-slate-800 truncate max-w-xs">{b.bookName}</td>
+                                  <td className="p-2 text-center font-bold text-emerald-700">{b.availableQuantity} copies</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={3} className="p-4 text-center text-slate-400">Loading in-stock books...</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Content for LOW_STOCK */}
+                  {selectedMetricModal === 'LOW_STOCK' && (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-bold text-amber-900">Low Stock Warning (1 to 10 Copies Left)</p>
+                          <p className="text-xl font-black text-amber-800 mt-0.5">{summary.lowStockTitles || 0} Book Titles</p>
+                        </div>
+                        <span className="text-[11px] bg-white text-amber-800 px-2.5 py-1 rounded-md border border-amber-200 font-semibold">
+                          Reorder Soon
+                        </span>
+                      </div>
+                      <div className="border border-slate-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0">
+                            <tr>
+                              <th className="p-2">Book Code</th>
+                              <th className="p-2">Book Name</th>
+                              <th className="p-2 text-center">Copies Left</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {Array.isArray(metricModalData) && metricModalData.length > 0 ? (
+                              metricModalData.map((b: any) => (
+                                <tr key={b.id || b.bookCode} className="hover:bg-slate-50">
+                                  <td className="p-2 font-mono font-bold text-red-700">{b.bookCode}</td>
+                                  <td className="p-2 font-medium text-slate-800 truncate max-w-xs">{b.bookName}</td>
+                                  <td className="p-2 text-center font-bold text-amber-700">{b.availableQuantity} copies</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={3} className="p-4 text-center text-slate-400">Loading low-stock books...</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Content for OUT_OF_STOCK */}
+                  {selectedMetricModal === 'OUT_OF_STOCK' && (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-bold text-rose-900">Out of Stock Alert (0 or Negative)</p>
+                          <p className="text-xl font-black text-rose-800 mt-0.5">{summary.outOfStockTitles || 0} Book Titles</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedMetricModal(null);
+                            navigate(invertUrl);
+                          }}
+                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1 shadow-2xs"
+                        >
+                          <span>Go to Stock Inward</span>
+                          <PlusCircle size={13} />
+                        </button>
+                      </div>
+                      <div className="border border-slate-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0">
+                            <tr>
+                              <th className="p-2">Book Code</th>
+                              <th className="p-2">Book Name</th>
+                              <th className="p-2 text-center">Available Stock</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {Array.isArray(metricModalData) && metricModalData.length > 0 ? (
+                              metricModalData.map((b: any) => (
+                                <tr key={b.id || b.bookCode} className="hover:bg-slate-50">
+                                  <td className="p-2 font-mono font-bold text-red-700">{b.bookCode}</td>
+                                  <td className="p-2 font-medium text-slate-800 truncate max-w-xs">{b.bookName}</td>
+                                  <td className="p-2 text-center font-bold text-rose-700">{b.availableQuantity} copies</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={3} className="p-4 text-center text-slate-400">Loading out-of-stock books...</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Content for TOTAL_DISPATCHED */}
+                  {selectedMetricModal === 'TOTAL_DISPATCHED' && (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 flex justify-between items-center">
+                        <div>
+                          <p className="text-xs font-bold text-purple-900">Total Lifetime Dispatches</p>
+                          <p className="text-xl font-black text-purple-800 mt-0.5">{summary.totalDispatchedCopies || 0} Copies</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedMetricModal(null);
+                            navigate('/admin/dispatch-history');
+                          }}
+                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1 shadow-2xs"
+                        >
+                          <span>View Dispatch History</span>
+                          <ExternalLink size={12} />
+                        </button>
+                      </div>
+                      <p className="text-slate-600 text-xs">
+                        Yeh warehouse se ab tak dispatch kiye gaye kitabon ki kul sankhya hai. Detailed dispatch logs ke liye Dispatch History page dekhein.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <div>
+                {(selectedMetricModal === 'IN_STOCK' || selectedMetricModal === 'LOW_STOCK' || selectedMetricModal === 'OUT_OF_STOCK' || selectedMetricModal === 'TOTAL_TITLES') && (
+                  <button
+                    onClick={() => {
+                      if (selectedMetricModal === 'IN_STOCK') setStatusFilter('IN_STOCK');
+                      else if (selectedMetricModal === 'LOW_STOCK') setStatusFilter('LOW_STOCK');
+                      else if (selectedMetricModal === 'OUT_OF_STOCK') setStatusFilter('OUT_OF_STOCK');
+                      else if (selectedMetricModal === 'TOTAL_TITLES') setStatusFilter('ALL');
+                      setSelectedMetricModal(null);
+                    }}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-xs cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Filter size={12} />
+                    <span>Apply Filter to Main Table</span>
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedMetricModal(null)}
+                className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-xs cursor-pointer transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
