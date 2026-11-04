@@ -2,62 +2,49 @@ import { Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { ProductCatalog, BookStock, PackagePreparation, Order } from '../models';
+import { getBarcodeCatalog } from '../services/stock.service';
 import { successResponse, errorResponse } from '../utils/response';
 import { normalizeBookCode } from '../utils/normalize';
 import { logAudit } from '../utils/audit';
 
 /**
  * Get all available products with preparation & stock details
+ * Resolves all product variants from Barcode Catalog so no duplicate-code products are collapsed.
  */
 export async function getProducts(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    // 1. Get products from ProductCatalog
-    const catalogProducts = await ProductCatalog.find({}).sort({ productCode: 1 }).lean();
-
-    // 2. Discover any additional products from Orders or BookStock
-    const knownProductCodes = new Set(catalogProducts.map(p => p.productCode.toUpperCase().trim()));
-
-    const orderProducts = await Order.aggregate([
-      { $match: { productCode: { $exists: true, $ne: '' } } },
-      {
-        $group: {
-          _id: { productCode: '$productCode' },
-          productName: { $first: '$items.productName' },
-          books: { $addToSet: '$items.bookCode' },
-        },
-      },
+    const [barcodeData, preparations, allBookStocks] = await Promise.all([
+      getBarcodeCatalog(),
+      PackagePreparation.find({}).lean(),
+      BookStock.find({}).lean(),
     ]);
 
-    const allProductsMap = new Map<string, { productCode: string; productName: string; books: string[] }>();
+    const productsList = barcodeData.products || [];
 
-    for (const p of catalogProducts) {
-      allProductsMap.set(p.productCode.toUpperCase().trim(), {
-        productCode: p.productCode.toUpperCase().trim(),
-        productName: p.productName || p.productCode,
-        books: p.books || [],
-      });
-    }
+    const productKey = (code: string, name: string) =>
+      `${(code || '').toUpperCase().trim()}||${(name || '').trim().toLowerCase()}`;
 
-    for (const op of orderProducts) {
-      const pCode = (op._id.productCode || '').toUpperCase().trim();
-      if (pCode && !knownProductCodes.has(pCode)) {
-        const flattenedBooks: string[] = Array.from(new Set((op.books || []).flat().filter(Boolean)));
-        allProductsMap.set(pCode, {
-          productCode: pCode,
-          productName: (Array.isArray(op.productName) ? op.productName[0] : op.productName) || pCode,
-          books: flattenedBooks,
-        });
+    // Map preparations by key: productCode + productName
+    const prepMap = new Map<string, any>();
+    const prepCodeMap = new Map<string, any>(); // Fallback for single-variant products
+    for (const prep of preparations) {
+      const pCode = (prep.productCode || '').toUpperCase().trim();
+      const pName = (prep.productName || '').trim();
+      if (pCode && pName) {
+        prepMap.set(productKey(pCode, pName), prep);
+      }
+      if (pCode && !prepCodeMap.has(pCode)) {
+        prepCodeMap.set(pCode, prep);
       }
     }
 
-    // 3. For each product, fetch its Preparation data and Book Stock
-    const preparations = await PackagePreparation.find({}).lean();
-    const prepMap = new Map<string, any>();
-    for (const prep of preparations) {
-      prepMap.set(prep.productCode.toUpperCase().trim(), prep);
+    // Count how many products share each productCode
+    const codeProductCount = new Map<string, number>();
+    for (const p of productsList) {
+      const c = (p.productCode || '').toUpperCase().trim();
+      codeProductCount.set(c, (codeProductCount.get(c) || 0) + 1);
     }
 
-    const allBookStocks = await BookStock.find({}).lean();
     const stockMap = new Map<string, any>();
     for (const bs of allBookStocks) {
       stockMap.set(normalizeBookCode(bs.bookCode), bs);
@@ -65,15 +52,24 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
 
     const resultList: any[] = [];
 
-    for (const [pCode, pData] of allProductsMap.entries()) {
-      const prepDoc = prepMap.get(pCode);
+    for (const p of productsList) {
+      const pCode = (p.productCode || '').toUpperCase().trim();
+      const pName = (p.productName || pCode).trim();
+      const key = productKey(pCode, pName);
+
+      // Match prep record: by exact (code + name), or fallback to code if this code is unique
+      let prepDoc = prepMap.get(key);
+      if (!prepDoc && codeProductCount.get(pCode) === 1) {
+        prepDoc = prepCodeMap.get(pCode);
+      }
+
       const packagedStock = prepDoc?.packagedStock ?? 0;
 
       // Calculate stock for each book in product
       let minBookStock = 999999;
       const booksDetail: any[] = [];
 
-      for (const bCode of pData.books) {
+      for (const bCode of p.books || []) {
         const cleanBCode = normalizeBookCode(bCode);
         const bookStock = stockMap.get(cleanBCode);
         const avail = bookStock?.availableQuantity ?? 0;
@@ -90,14 +86,15 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
         });
       }
 
-      const packableSets = pData.books.length > 0 ? (minBookStock === 999999 ? 0 : minBookStock) : 0;
+      const packableSets = (p.books || []).length > 0 ? (minBookStock === 999999 ? 0 : minBookStock) : 0;
       const totalBooksCopies = booksDetail.reduce((acc, b) => acc + (b.availableQuantity || 0), 0);
       const shelfStock = Math.max(0, packableSets - packagedStock);
       const totalAvailableStock = shelfStock + packagedStock;
 
       resultList.push({
+        id: p.id || key,
         productCode: pCode,
-        productName: pData.productName,
+        productName: pName,
         books: booksDetail,
         totalBooksCount: booksDetail.length,
         packableSets,
@@ -120,9 +117,14 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
       totalPackagedSets += pQty;
 
       const pCode = (prep.productCode || '').toUpperCase().trim();
-      const pData = allProductsMap.get(pCode);
-      const booksList = (pData && pData.books.length > 0)
-        ? pData.books
+      const pName = (prep.productName || '').trim();
+      const matchingProduct = productsList.find((p: any) =>
+        (p.productCode || '').toUpperCase().trim() === pCode &&
+        (!pName || (p.productName || '').trim().toLowerCase() === pName.toLowerCase())
+      ) || productsList.find((p: any) => (p.productCode || '').toUpperCase().trim() === pCode);
+
+      const booksList: string[] = (matchingProduct && matchingProduct.books?.length > 0)
+        ? matchingProduct.books
         : (prep.books || []).map((b: any) => b.bookCode);
 
       for (const bCode of booksList) {
@@ -164,9 +166,10 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
  */
 export async function packBatch(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const { productCode, quantity, scannedBooks, batchId } = req.body;
+    const { productCode, productName, quantity, scannedBooks, batchId } = req.body;
 
     const cleanProductCode = (productCode || '').trim().toUpperCase();
+    const cleanProductName = (productName || '').trim();
     const parsedQty = parseInt(quantity, 10);
 
     if (!cleanProductCode) {
@@ -178,15 +181,24 @@ export async function packBatch(req: AuthenticatedRequest, res: Response, next: 
     }
 
     // Find or create PackagePreparation record
-    let prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    let prep = cleanProductName
+      ? await PackagePreparation.findOne({ productCode: cleanProductCode, productName: cleanProductName })
+      : null;
+
+    if (!prep && !cleanProductName) {
+      prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    }
 
     // Look up product info
-    let productName = cleanProductCode;
+    let resolvedProductName = cleanProductName || cleanProductCode;
     let booksList: { bookCode: string; bookName: string }[] = [];
 
-    const catalogDoc = await ProductCatalog.findOne({ productCode: cleanProductCode });
+    const catalogDoc = cleanProductName
+      ? await ProductCatalog.findOne({ productCode: cleanProductCode, productName: cleanProductName })
+      : await ProductCatalog.findOne({ productCode: cleanProductCode });
+
     if (catalogDoc) {
-      productName = catalogDoc.productName || cleanProductCode;
+      resolvedProductName = catalogDoc.productName || resolvedProductName;
       for (const bCode of catalogDoc.books || []) {
         const bs = await BookStock.findOne({ bookCode: normalizeBookCode(bCode) });
         booksList.push({
@@ -196,9 +208,14 @@ export async function packBatch(req: AuthenticatedRequest, res: Response, next: 
       }
     } else {
       // Check from orders
-      const orderSample = await Order.findOne({ productCode: cleanProductCode });
+      const orderSample = await Order.findOne({
+        $or: [
+          { productCode: cleanProductCode },
+          { 'items.productCode': cleanProductCode },
+        ],
+      });
       if (orderSample) {
-        productName = orderSample.items?.[0]?.productName || cleanProductCode;
+        resolvedProductName = orderSample.items?.[0]?.productName || cleanProductCode;
         for (const it of orderSample.items || []) {
           booksList.push({
             bookCode: it.bookCode,
@@ -213,7 +230,7 @@ export async function packBatch(req: AuthenticatedRequest, res: Response, next: 
     if (!prep) {
       prep = new PackagePreparation({
         productCode: cleanProductCode,
-        productName,
+        productName: resolvedProductName,
         books: booksList,
         packagedStock: parsedQty,
         shelfStock: 0,
@@ -256,13 +273,14 @@ export async function packBatch(req: AuthenticatedRequest, res: Response, next: 
         entityId: prep._id.toString(),
         metadata: {
           productCode: cleanProductCode,
+          productName: resolvedProductName,
           quantityPacked: parsedQty,
           batchId: currentBatchId,
         },
       });
     }
 
-    return successResponse(res, `Successfully packed ${parsedQty} package(s) of "${cleanProductCode}"! Total packaged stock is now ${prep.packagedStock}.`, {
+    return successResponse(res, `Successfully packed ${parsedQty} package(s) of "${resolvedProductName}"! Total packaged stock is now ${prep.packagedStock}.`, {
       productCode: cleanProductCode,
       productName: prep.productName,
       packagedStock: prep.packagedStock,
@@ -286,10 +304,19 @@ export async function getStockSummary(req: AuthenticatedRequest, res: Response, 
       ProductCatalog.find({}).lean(),
     ]);
 
+    const catalogKey = (code: string, name: string) =>
+      `${(code || '').toUpperCase().trim()}||${(name || '').trim().toLowerCase()}`;
+
     const catalogMap = new Map<string, string[]>();
+    const catalogCodeMap = new Map<string, string[]>();
+
     for (const cp of catalogProducts) {
       if (cp.productCode && cp.books) {
-        catalogMap.set(cp.productCode.toUpperCase().trim(), cp.books.map((b: any) => normalizeBookCode(b)));
+        const books = cp.books.map((b: any) => normalizeBookCode(b));
+        catalogMap.set(catalogKey(cp.productCode, cp.productName), books);
+        if (!catalogCodeMap.has(cp.productCode.toUpperCase().trim())) {
+          catalogCodeMap.set(cp.productCode.toUpperCase().trim(), books);
+        }
       }
     }
 
@@ -302,11 +329,14 @@ export async function getStockSummary(req: AuthenticatedRequest, res: Response, 
       totalPackagedSets += pQty;
 
       const pCode = (prep.productCode || '').toUpperCase().trim();
+      const pName = (prep.productName || '').trim();
       let booksForProduct: string[] = [];
       if (prep.books && prep.books.length > 0) {
         booksForProduct = prep.books.map((b: any) => normalizeBookCode(b.bookCode));
-      } else if (catalogMap.has(pCode)) {
-        booksForProduct = catalogMap.get(pCode) || [];
+      } else if (catalogMap.has(catalogKey(pCode, pName))) {
+        booksForProduct = catalogMap.get(catalogKey(pCode, pName)) || [];
+      } else if (catalogCodeMap.has(pCode)) {
+        booksForProduct = catalogCodeMap.get(pCode) || [];
       }
 
       for (const bCode of booksForProduct) {
@@ -348,15 +378,22 @@ export async function getStockSummary(req: AuthenticatedRequest, res: Response, 
  */
 export async function dispatchPackageV2(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const { productCode, quantity = 1 } = req.body;
+    const { productCode, productName, quantity = 1 } = req.body;
     const cleanProductCode = (productCode || '').trim().toUpperCase();
+    const cleanProductName = (productName || '').trim();
     const qty = parseInt(quantity, 10) || 1;
 
     if (!cleanProductCode) {
       return errorResponse(res, 'Product code is required', 'PRODUCT_CODE_REQUIRED', 400);
     }
 
-    const prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    let prep = cleanProductName
+      ? await PackagePreparation.findOne({ productCode: cleanProductCode, productName: cleanProductName })
+      : null;
+    if (!prep) {
+      prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    }
+
     let source = 'SHELF_STOCK';
 
     if (prep && prep.packagedStock >= qty) {
@@ -372,8 +409,9 @@ export async function dispatchPackageV2(req: AuthenticatedRequest, res: Response
       source = 'SHELF_STOCK';
     }
 
-    return successResponse(res, `Dispatched ${qty} set(s) of "${cleanProductCode}" using ${source}.`, {
+    return successResponse(res, `Dispatched ${qty} set(s) of "${cleanProductName || cleanProductCode}" using ${source}.`, {
       productCode: cleanProductCode,
+      productName: cleanProductName,
       source,
       remainingPackagedStock: prep ? prep.packagedStock : 0,
     });
@@ -388,24 +426,48 @@ export async function dispatchPackageV2(req: AuthenticatedRequest, res: Response
  */
 export async function updatePackagedStock(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const { productCode, packagedStock } = req.body;
+    const { productCode, productName, packagedStock } = req.body;
     const cleanProductCode = (productCode || '').trim().toUpperCase();
+    const cleanProductName = (productName || '').trim();
     const newQty = Math.max(0, parseInt(packagedStock, 10) || 0);
 
     if (!cleanProductCode) {
       return errorResponse(res, 'Product code is required', 'PRODUCT_CODE_REQUIRED', 400);
     }
 
-    let prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    let prep = cleanProductName
+      ? await PackagePreparation.findOne({ productCode: cleanProductCode, productName: cleanProductName })
+      : null;
+
+    if (!prep && !cleanProductName) {
+      prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    }
+
     if (!prep) {
+      // Find product books
+      const catalogDoc = cleanProductName
+        ? await ProductCatalog.findOne({ productCode: cleanProductCode, productName: cleanProductName })
+        : await ProductCatalog.findOne({ productCode: cleanProductCode });
+
+      const booksList: any[] = [];
+      if (catalogDoc && catalogDoc.books) {
+        for (const bCode of catalogDoc.books) {
+          const bs = await BookStock.findOne({ bookCode: normalizeBookCode(bCode) });
+          booksList.push({
+            bookCode: bCode,
+            bookName: bs?.bookName || bCode,
+          });
+        }
+      }
+
       prep = new PackagePreparation({
         productCode: cleanProductCode,
-        productName: cleanProductCode,
-        books: [],
+        productName: cleanProductName || catalogDoc?.productName || cleanProductCode,
+        books: booksList,
         packagedStock: newQty,
         shelfStock: 0,
         totalAvailableStock: newQty,
-        totalBatchesPacked: 0,
+        totalBatchesPacked: newQty > 0 ? 1 : 0,
         history: [],
       });
     } else {
@@ -422,13 +484,15 @@ export async function updatePackagedStock(req: AuthenticatedRequest, res: Respon
         entityId: prep._id.toString(),
         metadata: {
           productCode: cleanProductCode,
+          productName: prep.productName,
           newPackagedStock: newQty,
         },
       });
     }
 
-    return successResponse(res, `Packaged stock for "${cleanProductCode}" updated to ${newQty}.`, {
+    return successResponse(res, `Packaged stock for "${prep.productName || cleanProductCode}" updated to ${newQty}.`, {
       productCode: cleanProductCode,
+      productName: prep.productName,
       packagedStock: prep.packagedStock,
     });
   } catch (error) {
@@ -441,14 +505,22 @@ export async function updatePackagedStock(req: AuthenticatedRequest, res: Respon
  */
 export async function resetPackagedStock(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const { productCode } = req.body;
+    const { productCode, productName } = req.body;
     const cleanProductCode = (productCode || '').trim().toUpperCase();
+    const cleanProductName = (productName || '').trim();
 
     if (!cleanProductCode) {
       return errorResponse(res, 'Product code is required', 'PRODUCT_CODE_REQUIRED', 400);
     }
 
-    const prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    let prep = cleanProductName
+      ? await PackagePreparation.findOne({ productCode: cleanProductCode, productName: cleanProductName })
+      : null;
+
+    if (!prep && !cleanProductName) {
+      prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    }
+
     if (prep) {
       prep.packagedStock = 0;
       await prep.save();
@@ -460,12 +532,13 @@ export async function resetPackagedStock(req: AuthenticatedRequest, res: Respons
         action: 'PACKAGED_STOCK_RESET',
         entityType: 'PackagePreparation',
         entityId: prep._id.toString(),
-        metadata: { productCode: cleanProductCode },
+        metadata: { productCode: cleanProductCode, productName: prep.productName },
       });
     }
 
-    return successResponse(res, `Packaged stock for "${cleanProductCode}" reset to 0.`, {
+    return successResponse(res, `Packaged stock for "${prep?.productName || cleanProductCode}" reset to 0.`, {
       productCode: cleanProductCode,
+      productName: prep?.productName,
       packagedStock: 0,
     });
   } catch (error) {

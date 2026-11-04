@@ -37,6 +37,7 @@ interface BookItem {
 }
 
 interface PreparationProduct {
+  id?: string;
   productCode: string;
   productName: string;
   books: BookItem[];
@@ -159,7 +160,9 @@ export const PreparationPage: React.FC = () => {
         if (sortBy === 'SHELF_DESC') return b.shelfStock - a.shelfStock;
         if (sortBy === 'TOTAL_DESC') return b.totalAvailableStock - a.totalAvailableStock;
         // Default CODE_ASC
-        return a.productCode.localeCompare(b.productCode, undefined, { numeric: true });
+        const codeCmp = a.productCode.localeCompare(b.productCode, undefined, { numeric: true });
+        if (codeCmp !== 0) return codeCmp;
+        return a.productName.localeCompare(b.productName);
       });
   }, [products, searchQuery, statusFilter, sortBy]);
 
@@ -179,6 +182,7 @@ export const PreparationPage: React.FC = () => {
     try {
       const res = await api.post('/preparation/update-stock', {
         productCode: editingProduct.productCode,
+        productName: editingProduct.productName,
         packagedStock: newQty,
       });
 
@@ -186,7 +190,10 @@ export const PreparationPage: React.FC = () => {
         if (soundEnabled) playSuccessChime();
         setProducts((prev) =>
           prev.map((p) => {
-            if (p.productCode !== editingProduct.productCode) return p;
+            const isMatch = editingProduct.id
+              ? p.id === editingProduct.id
+              : p.productCode === editingProduct.productCode && p.productName === editingProduct.productName;
+            if (!isMatch) return p;
             const maxSets = p.packableSets ?? (p.shelfStock + p.packagedStock);
             const updatedShelf = Math.max(0, maxSets - newQty);
             return {
@@ -212,20 +219,24 @@ export const PreparationPage: React.FC = () => {
     if ((product.packagedStock || 0) <= 0) return;
 
     const confirmed = window.confirm(
-      `"${product.productCode}" ke sabhi ${product.packagedStock} ready package delete / 0 karna chahte hain? Yeh books wapas shelf stock me count hongi.`
+      `"${product.productCode}" (${product.productName}) ke sabhi ${product.packagedStock} ready package delete / 0 karna chahte hain? Yeh books wapas shelf stock me count hongi.`
     );
     if (!confirmed) return;
 
     try {
       const res = await api.post('/preparation/reset-stock', {
         productCode: product.productCode,
+        productName: product.productName,
       });
 
       if (res.data.success) {
         if (soundEnabled) playSuccessChime();
         setProducts((prev) =>
           prev.map((p) => {
-            if (p.productCode !== product.productCode) return p;
+            const isMatch = product.id
+              ? p.id === product.id
+              : p.productCode === product.productCode && p.productName === product.productName;
+            if (!isMatch) return p;
             const restoredShelf = p.packableSets ?? (p.shelfStock + p.packagedStock);
             return {
               ...p,
@@ -304,6 +315,7 @@ export const PreparationPage: React.FC = () => {
     try {
       const res = await api.post('/preparation/pack-batch', {
         productCode,
+        productName: activeProduct?.productName,
         quantity: 1,
         scannedBooks: booksScanned,
       });
@@ -348,6 +360,7 @@ export const PreparationPage: React.FC = () => {
     try {
       const res = await api.post('/preparation/pack-batch', {
         productCode: activeProduct.productCode,
+        productName: activeProduct.productName,
         quantity: qty,
         scannedBooks: ['DIRECT_MANUAL_PACK'],
       });
@@ -779,7 +792,7 @@ export const PreparationPage: React.FC = () => {
 
             return (
               <div
-                key={product.productCode}
+                key={product.id || `${product.productCode}-${product.productName}`}
                 className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
               >
                 <div className="p-4 sm:p-4.5">

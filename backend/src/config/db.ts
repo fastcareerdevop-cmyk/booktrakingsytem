@@ -243,7 +243,18 @@ export async function connectDatabase() {
     // Clean up legacy unique index on productCode if it exists
     try {
       await mongoose.connection.collection('orders').dropIndex('productCode_1');
-      console.log('🧹 Cleaned up legacy unique index productCode_1');
+      console.log('🧹 Cleaned up legacy unique index productCode_1 on orders');
+    } catch (e) {}
+
+    try {
+      const prepIndexes = await mongoose.connection.collection('packagepreparations').indexes();
+      const uniquePrepProductCodeIndex = prepIndexes.find(
+        (index: any) => index.key?.productCode === 1 && index.unique && typeof index.name === 'string'
+      );
+      if (uniquePrepProductCodeIndex?.name) {
+        await mongoose.connection.collection('packagepreparations').dropIndex(uniquePrepProductCodeIndex.name);
+        console.log('🧹 Removed unique PackagePreparation productCode index');
+      }
     } catch (e) {}
 
     // Auto-seed Admin if not exists

@@ -28,7 +28,6 @@ const PackagePreparationSchema = new Schema<IPackagePreparation>(
     productCode: {
       type: String,
       required: true,
-      unique: true,
       uppercase: true,
       trim: true,
       index: true,
@@ -78,6 +77,8 @@ const PackagePreparationSchema = new Schema<IPackagePreparation>(
     timestamps: true,
   }
 );
+
+PackagePreparationSchema.index({ productCode: 1, productName: 1 });
 
 export const PackagePreparation = mongoose.model<IPackagePreparation>(
   'PackagePreparation',
