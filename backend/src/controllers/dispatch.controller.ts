@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { verifyDispatchSchema } from '../validators/dispatch.validator';
 import * as dispatchService from '../services/dispatch.service';
-import { Order, BookStock, DispatchLog, VerificationAttempt } from '../models';
+import { Order, BookStock, DispatchLog, VerificationAttempt, PackagePreparation } from '../models';
 import { successResponse, errorResponse } from '../utils/response';
 import * as orderService from '../services/order.service';
 import { computeOrderStatus, computeItemStatus } from '../services/order.service';
@@ -336,47 +336,142 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
           );
         }
 
-        // A. Check if scannedCode matches this active order's product code
-        const isMatchingProduct =
-          (activeOrder.productCode && activeOrder.productCode.toUpperCase() === scannedCode) ||
-          activeOrder.items.some((i: any) => i.productCode && i.productCode.toUpperCase() === scannedCode);
+        // A. Check if scannedCode matches this active order's product code or any item's product code
+        const cleanScanned = normalizeBookCode(scannedCode);
 
-        if (isMatchingProduct) {
-          const totalRequired = activeOrder.items.reduce((acc: number, i: any) => acc + i.requiredQuantity, 0);
-          const msg = `Product Code "${scannedCode}" Scanned & Verified! All ${totalRequired} books verified in parcel. Ab parcel ka Tracking ID scan karein.`;
+        // Find items in this order that belong to this productCode
+        const targetProductItems = activeOrder.items.filter((i: any) => {
+          const itemPCode = normalizeBookCode(i.productCode || '');
+          if (itemPCode) {
+            return itemPCode === cleanScanned;
+          }
+          // If item doesn't have an explicit productCode, fallback to activeOrder.productCode
+          return normalizeBookCode(activeOrder.productCode || '') === cleanScanned;
+        });
+
+        if (targetProductItems.length > 0) {
+          const pendingItemsForProduct = targetProductItems.filter(
+            (i: any) => i.requiredQuantity > i.dispatchedQuantity
+          );
+
+          if (pendingItemsForProduct.length === 0) {
+            return errorResponse(
+              res,
+              `❌ Product "${scannedCode}" is already fully verified for this order! Double scan prevented. Please scan remaining products/books.`,
+              'ALREADY_VERIFIED',
+              400
+            );
+          }
+
+          let itemsDispatchedNow = 0;
+
+          // Increment 1 copy / set per scan for this product
+          for (const item of pendingItemsForProduct) {
+            itemsDispatchedNow += 1;
+
+            // Increment item in Order atomically by 1
+            await Order.updateOne(
+              { _id: activeOrder._id, 'items._id': item._id },
+              { $inc: { 'items.$.dispatchedQuantity': 1 } }
+            );
+
+            // Deduct 1 from warehouse BookStock master
+            const cleanBCode = normalizeBookCode(item.bookCode);
+            await BookStock.findOneAndUpdate(
+              { bookCode: cleanBCode },
+              {
+                $setOnInsert: {
+                  bookCode: cleanBCode,
+                  totalInward: 0,
+                  lowStockThreshold: 10,
+                  lastRestockedAt: new Date(),
+                },
+                $set: { bookName: item.bookName },
+                $inc: {
+                  availableQuantity: -1,
+                  totalDispatched: 1,
+                },
+              },
+              { upsert: true, new: true, setDefaultsOnInsert: false }
+            );
+
+            // Create DispatchLog
+            await DispatchLog.create({
+              orderId: activeOrder._id,
+              orderItemId: item._id.toString(),
+              employeeId: new mongoose.Types.ObjectId(req.user.id),
+              verifiedBookCode: item.bookCode,
+              quantity: 1,
+              result: 'SUCCESS',
+              dispatchMode: 'PRODUCT_CODE_SCAN',
+              verifiedAt: new Date(),
+            });
+          }
+
+          // Also adjust PackagePreparation packagedStock if pre-packaged parcels were ready
+          try {
+            const prepDoc = await PackagePreparation.findOne({
+              productCode: cleanScanned,
+              packagedStock: { $gt: 0 },
+            });
+            if (prepDoc) {
+              prepDoc.packagedStock = Math.max(0, prepDoc.packagedStock - 1);
+              await prepDoc.save();
+            }
+          } catch (e) {}
+
+          // Re-fetch updated order to evaluate overall completeness
+          const updatedOrder = (await Order.findById(activeOrder._id))!;
+          const totalRequired = updatedOrder.items.reduce((acc: number, i: any) => acc + i.requiredQuantity, 0);
+          const totalDispatched = updatedOrder.items.reduce((acc: number, i: any) => acc + i.dispatchedQuantity, 0);
+          const totalPending = Math.max(0, totalRequired - totalDispatched);
+          const isOrderComplete = totalPending === 0;
+
+          const notification = isOrderComplete
+            ? await notifyOrderWhenFullyDispatched(
+                updatedOrder._id.toString(),
+                req.user.id,
+                0
+              )
+            : undefined;
+
+          const msg = isOrderComplete
+            ? `Product Code "${scannedCode}" Scanned & Verified! All ${totalRequired} books verified in parcel. Ab parcel ka Tracking ID scan karein.`
+            : `Product Code "${scannedCode}" Scanned & Verified! (${itemsDispatchedNow} copies). Ab baaki ke products / books scan karein (${totalPending} bachi hain).`;
 
           return successResponse(
             res,
             msg,
             {
               scanType: 'PRODUCT_CODE',
-              allBooksVerified: true,
-              requiresTrackingMatch: true,
+              allBooksVerified: isOrderComplete,
+              requiresTrackingMatch: isOrderComplete,
               message: msg,
-              itemsDispatched: totalRequired,
+              itemsDispatched: itemsDispatchedNow,
+              notification,
               order: {
-                id: activeOrder._id.toString(),
-                orderCode: activeOrder.orderCode,
-                productCode: activeOrder.productCode,
-                studentName: activeOrder.studentName,
-                mobileNumber: activeOrder.mobileNumber,
-                trackingId: activeOrder.trackingId,
+                id: updatedOrder._id.toString(),
+                orderCode: updatedOrder.orderCode,
+                productCode: updatedOrder.productCode,
+                studentName: updatedOrder.studentName,
+                mobileNumber: updatedOrder.mobileNumber,
+                trackingId: updatedOrder.trackingId,
                 totalRequired,
-                totalDispatched: totalRequired,
-                totalPending: 0,
-                allVerified: true,
-                status: 'VERIFYING_TRACKING',
-                items: activeOrder.items.map((i: any) => ({
+                totalDispatched,
+                totalPending,
+                allVerified: isOrderComplete,
+                status: isOrderComplete ? 'VERIFYING_TRACKING' : 'PARTIALLY_DISPATCHED',
+                items: updatedOrder.items.map((i: any) => ({
                   id: i._id.toString(),
-                  productCode: i.productCode || activeOrder.productCode,
+                  productCode: i.productCode || updatedOrder.productCode,
                   productName: i.productName || 'Product',
                   bookCode: i.bookCode,
                   bookName: i.bookName,
                   requiredQuantity: i.requiredQuantity,
-                  dispatchedQuantity: i.requiredQuantity,
-                  pendingQuantity: 0,
-                  isVerified: true,
-                  status: 'VERIFIED',
+                  dispatchedQuantity: i.dispatchedQuantity,
+                  pendingQuantity: Math.max(0, i.requiredQuantity - i.dispatchedQuantity),
+                  isVerified: i.dispatchedQuantity >= i.requiredQuantity,
+                  status: computeItemStatus(i.requiredQuantity, i.dispatchedQuantity),
                 })),
               },
             }

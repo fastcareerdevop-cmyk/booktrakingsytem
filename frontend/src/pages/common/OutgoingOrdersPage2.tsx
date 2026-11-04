@@ -522,8 +522,9 @@ export const OutgoingOrdersPage2: React.FC = () => {
           itemsDispatched: countDispatched > 0 ? countDispatched : undefined,
         });
 
-        // 🌟 Step 3: Trigger Compulsory Tracking ID Verification
-        if ((isComplete || data.allBooksVerified || data.requiresTrackingMatch || data.scanType === 'PRODUCT_CODE') && !isLoadedOnly) {
+        // 🌟 Step 3: Trigger Compulsory Tracking ID Verification ONLY when ALL items/products are verified
+        const orderFullyVerified = (isComplete || (data.allBooksVerified && updatedOrder?.totalPending === 0)) && !isLoadedOnly;
+        if (orderFullyVerified) {
           setShowPaytmSuccess(true);
           showPaytmSuccessRef.current = true;
           setCompletedOrderId(updatedOrder?.id || activeOrderId || '');
@@ -536,7 +537,12 @@ export const OutgoingOrdersPage2: React.FC = () => {
 
           if (soundEnabled) {
             playSuccessChime();
-            speakVoiceAnnouncement(`Product verified for ${updatedOrder?.studentName}. Now scan tracking ID to confirm dispatch.`);
+            speakVoiceAnnouncement(`All items verified for ${updatedOrder?.studentName}. Now scan tracking ID to confirm dispatch.`);
+          }
+        } else if (!isLoadedOnly && soundEnabled && data.itemsDispatched) {
+          playSuccessChime();
+          if (updatedOrder?.totalPending > 0) {
+            speakVoiceAnnouncement(`Verified. ${updatedOrder.totalPending} pending.`);
           }
         }
       }
