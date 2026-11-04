@@ -1,30 +1,32 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Package,
   Boxes,
-  Layers,
   CheckCircle2,
   AlertTriangle,
   Search,
   ScanLine,
   RefreshCw,
-  Plus,
   Play,
-  RotateCcw,
-  Sparkles,
   Barcode,
-  Truck,
   Volume2,
   VolumeX,
   X,
-  ArrowRight,
   ShieldCheck,
   Zap,
   Check,
-  Save,
+  BookOpen,
+  SlidersHorizontal,
+  PackageCheck,
 } from 'lucide-react';
 import api from '../../services/api';
-import { playSuccessChime, playErrorTone, playOrderCompleteFanfare, speakVoiceAnnouncement, speakErrorMessage } from '../../utils/sound';
+import {
+  playSuccessChime,
+  playErrorTone,
+  playOrderCompleteFanfare,
+  speakVoiceAnnouncement,
+  speakErrorMessage,
+} from '../../utils/sound';
 
 interface BookItem {
   bookCode: string;
@@ -48,6 +50,8 @@ export const PreparationPage: React.FC = () => {
   const [products, setProducts] = useState<PreparationProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PACKAGED' | 'UNPACKAGED' | 'SHELF_AVAILABLE' | 'SHELF_EMPTY'>('ALL');
+  const [sortBy, setSortBy] = useState<'CODE_ASC' | 'NAME_ASC' | 'PACKAGED_DESC' | 'SHELF_DESC' | 'TOTAL_DESC'>('CODE_ASC');
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Live Warehouse Stock Summary (Shelf vs Packaged)
@@ -104,12 +108,42 @@ export const PreparationPage: React.FC = () => {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Filtered products list
-  const filteredProducts = products.filter(p =>
-    p.productCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.books.some(b => b.bookCode.toLowerCase().includes(searchQuery.toLowerCase()) || b.bookName.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Filter & sort products list
+  const filteredProducts = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    return products
+      .filter((p) => {
+        // Search filter
+        const matchesQuery =
+          !query ||
+          p.productCode.toLowerCase().includes(query) ||
+          p.productName.toLowerCase().includes(query) ||
+          p.books.some(
+            (b) =>
+              b.bookCode.toLowerCase().includes(query) ||
+              b.bookName.toLowerCase().includes(query)
+          );
+
+        if (!matchesQuery) return false;
+
+        // Status filter
+        if (statusFilter === 'PACKAGED') return p.packagedStock > 0;
+        if (statusFilter === 'UNPACKAGED') return p.packagedStock === 0;
+        if (statusFilter === 'SHELF_AVAILABLE') return p.shelfStock > 0;
+        if (statusFilter === 'SHELF_EMPTY') return p.shelfStock === 0;
+
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'NAME_ASC') return a.productName.localeCompare(b.productName);
+        if (sortBy === 'PACKAGED_DESC') return b.packagedStock - a.packagedStock;
+        if (sortBy === 'SHELF_DESC') return b.shelfStock - a.shelfStock;
+        if (sortBy === 'TOTAL_DESC') return b.totalAvailableStock - a.totalAvailableStock;
+        // Default CODE_ASC
+        return a.productCode.localeCompare(b.productCode, undefined, { numeric: true });
+      });
+  }, [products, searchQuery, statusFilter, sortBy]);
 
   // Open Packing Station for a product
   const handleStartPackaging = (product: PreparationProduct) => {
@@ -172,20 +206,24 @@ export const PreparationPage: React.FC = () => {
       });
 
       if (res.data.success) {
-        setCompletedPackagesCount(prev => prev + 1);
+        setCompletedPackagesCount((prev) => prev + 1);
 
         // Update local state immediately for instant UI responsiveness
-        setStockSummary(prev => ({
+        setStockSummary((prev) => ({
           ...prev,
           packagedStock: prev.packagedStock + 1,
           shelfStock: Math.max(0, prev.shelfStock - 1),
         }));
 
-        setActiveProduct(prev => prev ? {
-          ...prev,
-          packagedStock: (prev.packagedStock || 0) + 1,
-          shelfStock: Math.max(0, (prev.shelfStock || 0) - 1),
-        } : null);
+        setActiveProduct((prev) =>
+          prev
+            ? {
+                ...prev,
+                packagedStock: (prev.packagedStock || 0) + 1,
+                shelfStock: Math.max(0, (prev.shelfStock || 0) - 1),
+              }
+            : null
+        );
 
         fetchProducts();
       }
@@ -196,7 +234,7 @@ export const PreparationPage: React.FC = () => {
     }
   };
 
-  // Direct batch pack without scanning (user requested: manual batch pack)
+  // Direct batch pack without scanning
   const handleDirectPackWithoutScanning = async (qty: number) => {
     if (!activeProduct || qty <= 0) return;
     setIsSavingBatch(true);
@@ -208,11 +246,11 @@ export const PreparationPage: React.FC = () => {
       });
 
       if (res.data.success) {
-        setCompletedPackagesCount(prev => prev + qty);
+        setCompletedPackagesCount((prev) => prev + qty);
         setPackagingPhase('COMPLETED');
         setScanFeedback({
           type: 'success',
-          message: `🎉 Successfully packed ${qty} package(s) directly without scanning!`,
+          message: `Successfully packed ${qty} package(s) directly without scanning!`,
         });
 
         if (soundEnabled) {
@@ -253,7 +291,7 @@ export const PreparationPage: React.FC = () => {
 
     // Check if scanned book matches expected book
     if (cleanScanned === cleanExpected) {
-      // ✅ MATCH: Record book scan
+      // MATCH: Record book scan
       const nextScannedList = [
         ...scannedHistory,
         { packageNum: currentPackageNum, bookCode: expectedBook.bookCode, bookName: expectedBook.bookName },
@@ -269,18 +307,17 @@ export const PreparationPage: React.FC = () => {
 
       // Check if current package has all its books scanned
       if (nextBookIdx >= expectedBooks.length) {
-        // Current package is complete!
-        // Immediately persist THIS package (1 set) to backend
-        saveSinglePackage(activeProduct.productCode, expectedBooks.map(b => b.bookCode));
+        // Current package is complete! Persist to backend immediately
+        saveSinglePackage(activeProduct.productCode, expectedBooks.map((b) => b.bookCode));
 
         const nextPackageNum = currentPackageNum + 1;
 
         if (nextPackageNum > targetQuantity) {
-          // 🎉 ALL PACKAGES IN BATCH ARE COMPLETE!
+          // ALL PACKAGES IN BATCH ARE COMPLETE
           setPackagingPhase('COMPLETED');
           setScanFeedback({
             type: 'success',
-            message: `🎉 Batch Completed! All ${targetQuantity} package(s) have been verified and packed!`,
+            message: `Batch Completed! All ${targetQuantity} package(s) have been verified and packed!`,
           });
 
           if (soundEnabled) {
@@ -293,7 +330,7 @@ export const PreparationPage: React.FC = () => {
           setCurrentBookIndex(0);
           setScanFeedback({
             type: 'success',
-            message: `✓ Package ${currentPackageNum} complete & saved! Now scan Book 1 for Package ${nextPackageNum} of ${targetQuantity}...`,
+            message: `Package ${currentPackageNum} complete & saved! Now scan Book 1 for Package ${nextPackageNum} of ${targetQuantity}...`,
           });
           if (soundEnabled) {
             speakVoiceAnnouncement(`Package ${currentPackageNum} complete and saved. Starting Package ${nextPackageNum}.`);
@@ -305,18 +342,18 @@ export const PreparationPage: React.FC = () => {
         const nextExpected = expectedBooks[nextBookIdx];
         setScanFeedback({
           type: 'success',
-          message: `✓ Book ${currentBookIndex + 1} verified! Next: scan "${nextExpected.bookName || nextExpected.bookCode}" (${nextBookIdx + 1}/${expectedBooks.length})`,
+          message: `Book ${currentBookIndex + 1} verified! Next: scan "${nextExpected.bookName || nextExpected.bookCode}" (${nextBookIdx + 1}/${expectedBooks.length})`,
         });
       }
     } else {
-      // ❌ MISMATCH
+      // MISMATCH
       if (soundEnabled) {
         playErrorTone();
         speakErrorMessage(`Galat book barcode! Kripya ${expectedBook.bookName || expectedBook.bookCode} scan karein.`);
       }
       setScanFeedback({
         type: 'error',
-        message: `⚠️ Galat Barcode "${raw}"! Expected: "${expectedBook.bookName || expectedBook.bookCode}" (${expectedBook.bookCode})`,
+        message: `Galat Barcode "${raw}"! Expected: "${expectedBook.bookName || expectedBook.bookCode}" (${expectedBook.bookCode})`,
       });
     }
 
@@ -344,13 +381,13 @@ export const PreparationPage: React.FC = () => {
     if (expectedBooks.length === 0) return;
 
     const remainingBooks = expectedBooks.slice(currentBookIndex);
-    const newScans = remainingBooks.map(b => ({
+    const newScans = remainingBooks.map((b) => ({
       packageNum: currentPackageNum,
       bookCode: b.bookCode,
       bookName: b.bookName,
     }));
 
-    setScannedHistory(prev => [...prev, ...newScans]);
+    setScannedHistory((prev) => [...prev, ...newScans]);
 
     if (soundEnabled) {
       playSuccessChime();
@@ -358,14 +395,14 @@ export const PreparationPage: React.FC = () => {
     }
 
     // Save this 1 package immediately to backend
-    saveSinglePackage(activeProduct.productCode, expectedBooks.map(b => b.bookCode));
+    saveSinglePackage(activeProduct.productCode, expectedBooks.map((b) => b.bookCode));
 
     const nextPackageNum = currentPackageNum + 1;
     if (nextPackageNum > targetQuantity) {
       setPackagingPhase('COMPLETED');
       setScanFeedback({
         type: 'success',
-        message: `🎉 Batch Completed! All ${targetQuantity} package(s) have been verified and packed!`,
+        message: `Batch Completed! All ${targetQuantity} package(s) have been verified and packed!`,
       });
       if (soundEnabled) {
         playOrderCompleteFanfare();
@@ -376,7 +413,7 @@ export const PreparationPage: React.FC = () => {
       setCurrentBookIndex(0);
       setScanFeedback({
         type: 'success',
-        message: `✓ Package ${currentPackageNum} complete & saved! Now scan Book 1 for Package ${nextPackageNum} of ${targetQuantity}...`,
+        message: `Package ${currentPackageNum} complete & saved! Now scan Book 1 for Package ${nextPackageNum} of ${targetQuantity}...`,
       });
     }
   };
@@ -393,276 +430,398 @@ export const PreparationPage: React.FC = () => {
   const overallProgressPct = totalBooksInBatch > 0 ? Math.round((currentScannedCount / totalBooksInBatch) * 100) : 0;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      {/* ─── Page Header ────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
-              <Layers className="w-6 h-6" />
-            </span>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-              Product Preparation Station (पैकेजिंग तैयारी)
-            </h1>
+    <div className="space-y-4 max-w-7xl mx-auto">
+      {/* ─── 1. Header Section ────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200/80">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100 shadow-2xs">
+            <PackageCheck className="w-5 h-5" />
           </div>
-          <p className="text-sm font-medium text-slate-500">
-            Combo products ko pehle se pack karke rakhein. Books ek-ek karke scan karein aur pre-packaged parcel stock ready karein.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                Product Preparation Station (पैकेजिंग तैयारी)
+              </h1>
+              <span className="hidden sm:inline-block text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                Packaging Queue
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Combo products ko pehle se pack karke rakhein. Books scan karein aur ready parcel stock build karein.
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Top Control Buttons */}
+        <div className="flex items-center gap-2 self-start sm:self-center">
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 shadow-xs cursor-pointer"
+            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
+              soundEnabled
+                ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs'
+                : 'bg-slate-100 border-slate-200 text-slate-400 hover:bg-slate-200'
+            }`}
+            title="Toggle Chime & Voice Feedback"
           >
-            {soundEnabled ? <Volume2 size={16} className="text-emerald-600" /> : <VolumeX size={16} className="text-slate-400" />}
-            <span>{soundEnabled ? 'Chime & Voice ON' : 'Muted'}</span>
+            {soundEnabled ? <Volume2 size={14} className="text-emerald-600" /> : <VolumeX size={14} className="text-slate-400" />}
+            <span>{soundEnabled ? 'Chime & Voice ON' : 'Sound Muted'}</span>
           </button>
+
           <button
             onClick={fetchProducts}
             disabled={isLoading}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
+            title="Refresh Stock Data"
           >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
             <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* ─── Top Stat Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Pre-Packaged Ready Stock */}
-        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/60 rounded-2xl p-4 border border-indigo-200 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-indigo-800 flex items-center gap-1.5">
-              <Package size={16} className="text-indigo-600" />
-              Parcel Packaging (पैक्ड पार्सल)
-            </span>
-            <span className="bg-indigo-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full">
-              Ready Sets
-            </span>
+      {/* ─── 2. Summary Statistics Cards (4 Uniform Cards) ─────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Card 1: Parcel Packaging */}
+        <div className="bg-white rounded-xl p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100">
+            <Package className="w-5 h-5" />
           </div>
-          <div className="text-3xl font-black text-indigo-950 font-mono">
-            {stockSummary.packagedStock}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">
+                Parcel Packaging
+              </span>
+              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded">
+                Ready Sets
+              </span>
+            </div>
+            <div className="text-2xl font-bold font-mono text-slate-900 mt-0.5 leading-tight">
+              {stockSummary.packagedStock}
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+              Ready combo packages for dispatch
+            </div>
           </div>
-          <p className="text-xs text-indigo-700 font-medium mt-1">
-            Pre-packed combo packages ready for dispatch
-          </p>
         </div>
 
-        {/* Card 2: Shelf Stock (Loose Books) */}
-        <div className="bg-gradient-to-br from-amber-50 to-amber-100/60 rounded-2xl p-4 border border-amber-200 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
-              <Boxes size={16} className="text-amber-600" />
-              Shelf Available (शेल्फ स्टॉक)
-            </span>
-            <span className="bg-amber-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full">
-              Loose Copies
-            </span>
+        {/* Card 2: Shelf Available */}
+        <div className="bg-white rounded-xl p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100">
+            <Boxes className="w-5 h-5" />
           </div>
-          <div className="text-3xl font-black text-amber-950 font-mono">
-            {stockSummary.shelfStock}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">
+                Shelf Available
+              </span>
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded">
+                Loose
+              </span>
+            </div>
+            <div className="text-2xl font-bold font-mono text-slate-900 mt-0.5 leading-tight">
+              {stockSummary.shelfStock}
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+              Open books resting on shelves
+            </div>
           </div>
-          <p className="text-xs text-amber-700 font-medium mt-1">
-            Open books currently resting on shelves
-          </p>
         </div>
 
-        {/* Card 3: Total Warehouse Stock */}
-        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/60 rounded-2xl p-4 border border-emerald-200 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
-              <ShieldCheck size={16} className="text-emerald-600" />
-              Available Stock (कुल उपलब्ध)
-            </span>
-            <span className="bg-emerald-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full">
-              Total Books
-            </span>
+        {/* Card 3: Available Stock */}
+        <div className="bg-white rounded-xl p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
+            <ShieldCheck className="w-5 h-5" />
           </div>
-          <div className="text-3xl font-black text-emerald-950 font-mono">
-            {stockSummary.totalAvailableStock}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">
+                Available Stock
+              </span>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                Total
+              </span>
+            </div>
+            <div className="text-2xl font-bold font-mono text-emerald-700 mt-0.5 leading-tight">
+              {stockSummary.totalAvailableStock}
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5 font-mono">
+              {stockSummary.shelfStock} Shelf + {stockSummary.packagedStock} Packaged
+            </div>
           </div>
-          <p className="text-xs text-emerald-700 font-medium mt-1 font-mono">
-            Shelf ({stockSummary.shelfStock}) + Packaged ({stockSummary.packagedStock}) = Total {stockSummary.totalAvailableStock}
-          </p>
         </div>
 
-        {/* Card 4: Total Combo Products */}
-        <div className="bg-gradient-to-br from-slate-50 to-slate-100/70 rounded-2xl p-4 border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Barcode size={16} className="text-slate-600" />
-              Combo Products
-            </span>
-            <span className="bg-slate-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full">
-              Catalog
-            </span>
+        {/* Card 4: Combo Products */}
+        <div className="bg-white rounded-xl p-3.5 border border-slate-200/90 shadow-2xs flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 border border-slate-200">
+            <Barcode className="w-5 h-5" />
           </div>
-          <div className="text-3xl font-black text-slate-900 font-mono">
-            {products.length}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 truncate">
+                Combo Products
+              </span>
+              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                Catalog
+              </span>
+            </div>
+            <div className="text-2xl font-bold font-mono text-slate-900 mt-0.5 leading-tight">
+              {products.length}
+            </div>
+            <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+              Registered combo product codes
+            </div>
           </div>
-          <p className="text-xs text-slate-600 font-medium mt-1">
-            Registered combo product codes
-          </p>
         </div>
       </div>
 
-      {/* ─── Search and Filters Bar ────────────────────────────────────────────── */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+      {/* ─── 3. Search and Filter Toolbar ────────────────────────────────────────── */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+        {/* Search Input */}
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by Product Code (e.g. CA-INTER-G1), Product Name, or Book Barcode..."
-            className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
+            placeholder="Search by Product Code (e.g. CA-INTER-G1), Name, or Book Barcode..."
+            className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50/70 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-100 focus:border-red-400 focus:bg-white text-slate-800 placeholder:text-slate-400 font-medium"
           />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
-        <div className="text-xs font-semibold text-slate-500 whitespace-nowrap">
-          Showing <span className="font-bold text-slate-800">{filteredProducts.length}</span> of {products.length} Products
+
+        {/* Filters & Sorting */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {/* Status Dropdown */}
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="appearance-none bg-white border border-slate-200 rounded-lg pl-2.5 pr-7 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-red-100 focus:border-red-400 cursor-pointer"
+            >
+              <option value="ALL">All Stock Status</option>
+              <option value="PACKAGED">Packaged Ready (&gt; 0)</option>
+              <option value="UNPACKAGED">Needs Packaging (0 Packaged)</option>
+              <option value="SHELF_AVAILABLE">Shelf Available (&gt; 0)</option>
+              <option value="SHELF_EMPTY">Out of Shelf Stock</option>
+            </select>
+            <SlidersHorizontal size={12} className="text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+
+          {/* Sort Dropdown */}
+          <div className="relative">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="appearance-none bg-white border border-slate-200 rounded-lg pl-2.5 pr-7 py-2 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-red-100 focus:border-red-400 cursor-pointer"
+            >
+              <option value="CODE_ASC">Sort: Product Code (A-Z)</option>
+              <option value="NAME_ASC">Sort: Product Name (A-Z)</option>
+              <option value="PACKAGED_DESC">Most Packaged Ready</option>
+              <option value="SHELF_DESC">Most Shelf Stock</option>
+              <option value="TOTAL_DESC">Highest Total Available</option>
+            </select>
+            <span className="text-slate-400 text-[10px] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">▼</span>
+          </div>
+
+          {/* Product Count Pill */}
+          <span className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-600 font-medium whitespace-nowrap text-[11px] border border-slate-200">
+            Showing <strong className="text-slate-900 font-bold">{filteredProducts.length}</strong> of {products.length}
+          </span>
         </div>
       </div>
 
-      {/* ─── Product Catalog Grid ──────────────────────────────────────────────── */}
+      {/* ─── 4. Product Catalog Grid (3-Col Desktop, 2-Col Tablet, 1-Col Mobile) ─── */}
       {isLoading ? (
-        <div className="text-center py-16">
-          <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-500">Loading products & stock data...</p>
+        <div className="bg-white rounded-xl border border-slate-200 p-16 text-center shadow-2xs">
+          <div className="w-9 h-9 border-3 border-red-200 border-t-red-600 rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-xs font-semibold text-slate-600">Loading products & inventory stock...</p>
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-          <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-slate-800">No Products Found</h3>
-          <p className="text-xs text-slate-500 mt-1">Try adjusting your search query.</p>
+        <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-2xs">
+          <div className="w-12 h-12 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center mx-auto mb-3 border border-slate-200">
+            <Package className="w-6 h-6" />
+          </div>
+          <h3 className="text-sm font-bold text-slate-800">No Products Found</h3>
+          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+            No combo products matched your search or filter criteria. Try clearing search keywords or resetting filters.
+          </p>
+          {(searchQuery || statusFilter !== 'ALL') && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setStatusFilter('ALL');
+              }}
+              className="mt-3.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredProducts.map((product) => (
-            <div
-              key={product.productCode}
-              className="bg-white rounded-2xl border-2 border-slate-200 hover:border-indigo-400 p-5 shadow-xs transition-all flex flex-col justify-between"
-            >
-              <div>
-                {/* Header: Product Code & Packaged Badge */}
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <span className="font-mono text-xs font-black px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-200">
-                    {product.productCode}
-                  </span>
-                  <div className="text-right">
-                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${
-                      product.packagedStock > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      📦 {product.packagedStock} Packaged Ready
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredProducts.map((product) => {
+            const hasPackaged = product.packagedStock > 0;
+            const hasShelf = product.shelfStock > 0;
+
+            return (
+              <div
+                key={product.productCode}
+                className="bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
+              >
+                <div className="p-4 sm:p-4.5">
+                  {/* Top Row: Product Code & Packaged Badge */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 bg-slate-100 text-slate-800 rounded border border-slate-200/80">
+                      {product.productCode}
+                    </span>
+                    <span
+                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1 border ${
+                        hasPackaged
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-slate-50 text-slate-500 border-slate-200'
+                      }`}
+                    >
+                      <Package size={12} className={hasPackaged ? 'text-emerald-600' : 'text-slate-400'} />
+                      <span>{hasPackaged ? `${product.packagedStock} Packaged Ready` : '0 Packaged'}</span>
                     </span>
                   </div>
-                </div>
 
-                {/* Product Title */}
-                <h3 className="font-bold text-slate-900 text-base mb-3 leading-snug">
-                  {product.productName}
-                </h3>
+                  {/* Product Title */}
+                  <h3
+                    className="font-bold text-slate-900 text-sm mb-3 leading-snug line-clamp-2 min-h-[2.5rem]"
+                    title={product.productName}
+                  >
+                    {product.productName}
+                  </h3>
 
-                {/* Stock Breakdown Card */}
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 mb-4 space-y-1.5 text-xs">
-                  <div className="flex justify-between items-center text-slate-600">
-                    <span>Shelf Available (खुली):</span>
-                    <span className="font-mono font-bold text-amber-700">{product.shelfStock} on shelf</span>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-600">
-                    <span>Pre-Packaged (पैक्ड):</span>
-                    <span className="font-mono font-bold text-indigo-700">{product.packagedStock} sets</span>
-                  </div>
-                  <div className="flex justify-between items-center pt-1 border-t border-slate-200 text-slate-800 font-bold">
-                    <span>Total Available:</span>
-                    <span className="font-mono text-emerald-700">{product.totalAvailableStock} copies</span>
-                  </div>
-                </div>
-
-                {/* Included Books List */}
-                <div className="mb-4">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                    Books in this Product ({product.books.length}):
-                  </div>
-                  <div className="space-y-1">
-                    {product.books.map((b, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between text-[11px] bg-slate-50/80 px-2.5 py-1 rounded border border-slate-100"
-                      >
-                        <span className="font-medium text-slate-700 truncate pr-2" title={b.bookName}>
-                          {idx + 1}. {b.bookName || b.bookCode}
-                        </span>
-                        <span className="font-mono font-bold text-slate-500 text-[10px] shrink-0">
-                          {b.bookCode}
-                        </span>
+                  {/* 3-Column Stock Information Section */}
+                  <div className="grid grid-cols-3 gap-1.5 p-2 bg-slate-50 rounded-lg border border-slate-200/80 mb-3 text-center">
+                    <div className="bg-white rounded py-1 px-1 border border-slate-200/60">
+                      <span className="text-[9px] uppercase font-semibold text-slate-400 block tracking-wider">
+                        Shelf (खुली)
+                      </span>
+                      <div className={`font-mono text-xs sm:text-sm font-bold mt-0.5 ${hasShelf ? 'text-amber-700' : 'text-slate-400'}`}>
+                        {product.shelfStock}
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="bg-white rounded py-1 px-1 border border-slate-200/60">
+                      <span className="text-[9px] uppercase font-semibold text-slate-400 block tracking-wider">
+                        Pre-Pack (पैक्ड)
+                      </span>
+                      <div className={`font-mono text-xs sm:text-sm font-bold mt-0.5 ${hasPackaged ? 'text-indigo-700' : 'text-slate-400'}`}>
+                        {product.packagedStock}
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded py-1 px-1 border border-slate-200/60">
+                      <span className="text-[9px] uppercase font-semibold text-slate-400 block tracking-wider">
+                        Total Available
+                      </span>
+                      <div className="font-mono text-xs sm:text-sm font-bold text-emerald-700 mt-0.5">
+                        {product.totalAvailableStock}
+                      </div>
+                    </div>
                   </div>
+
+                  {/* Books in this Product */}
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                      <span className="flex items-center gap-1">
+                        <BookOpen size={12} className="text-slate-400" />
+                        <span>Books ({product.books.length}):</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">Barcode</span>
+                    </div>
+
+                    <div className="space-y-1 max-h-32 overflow-y-auto pr-0.5">
+                      {product.books.map((b, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between text-xs bg-slate-50/80 hover:bg-slate-100/70 px-2 py-1 rounded border border-slate-150 transition-colors"
+                        >
+                          <span className="text-slate-700 font-medium truncate pr-2 text-[11px]" title={b.bookName}>
+                            {idx + 1}. {b.bookName || b.bookCode}
+                          </span>
+                          <span className="font-mono text-[10px] font-semibold text-slate-500 shrink-0 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                            {b.bookCode}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Action Button */}
+                <div className="p-4 pt-0">
+                  <button
+                    onClick={() => handleStartPackaging(product)}
+                    className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs font-semibold rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Play size={13} className="fill-white" />
+                    <span>Start Packaging (पैक करें)</span>
+                  </button>
                 </div>
               </div>
-
-              {/* Action Button */}
-              <button
-                onClick={() => handleStartPackaging(product)}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Play size={14} />
-                <span>Start Packaging (पैक करें)</span>
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* ─── Interactive Hands-Free Packaging Modal ────────────────────────────── */}
+      {/* ─── 5. Interactive Hands-Free Packaging Modal ────────────────────────────── */}
       {isPackingModalOpen && activeProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 relative overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="flex items-start justify-between pb-3 border-b border-slate-200 mb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-mono text-xs font-black bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-md">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-5 shadow-2xl border border-slate-200 relative overflow-hidden animate-in zoom-in-95 duration-200 text-slate-800">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100 mb-3.5">
+              <div className="min-w-0 pr-3">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="font-mono text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200">
                     {activeProduct.productCode}
                   </span>
-                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                     Currently Packaged: {activeProduct.packagedStock} sets
                   </span>
                 </div>
-                <h2 className="text-lg font-black text-slate-900">
+                <h2 className="text-base font-bold text-slate-900 truncate" title={activeProduct.productName}>
                   {activeProduct.productName}
                 </h2>
               </div>
               <button
                 onClick={() => setIsPackingModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
             {/* ── PHASE 1: SELECT TARGET QUANTITY ── */}
             {packagingPhase === 'SELECT_QTY' && (
-              <div className="space-y-5">
-                <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-4 text-center">
-                  <h4 className="text-sm font-bold text-indigo-950 mb-1">
-                    Kitne product pack karne hain? (Select Target Quantity)
+              <div className="space-y-4">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Select Target Quantity (कितने पैकेट पैक करने हैं?)
                   </h4>
-                  <p className="text-xs text-indigo-700">
-                    Kitne packages ready karke parcel packaging me rakhne hain?
+                  <p className="text-xs text-slate-500">
+                    Kitne ready combo sets packaging me tayyar karke rakhne hain?
                   </p>
 
                   {/* Quick Select Buttons */}
-                  <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
+                  <div className="flex items-center justify-center gap-1.5 mt-3 flex-wrap">
                     {[1, 3, 5, 10, 20, 50].map((qty) => (
                       <button
                         key={qty}
                         onClick={() => setTargetQuantity(qty)}
-                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                           targetQuantity === qty
-                            ? 'bg-indigo-600 text-white shadow-md scale-105'
+                            ? 'bg-indigo-600 text-white shadow-2xs'
                             : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
                         }`}
                       >
@@ -672,46 +831,46 @@ export const PreparationPage: React.FC = () => {
                   </div>
 
                   {/* Custom Input */}
-                  <div className="mt-4 flex items-center justify-center gap-2">
-                    <span className="text-xs text-slate-500 font-semibold">Ya custom quantity daalein:</span>
+                  <div className="mt-3 flex items-center justify-center gap-2 text-xs">
+                    <span className="text-slate-500 font-medium">Or enter custom count:</span>
                     <input
                       type="number"
                       min={1}
                       max={500}
                       value={targetQuantity}
                       onChange={(e) => setTargetQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      className="w-20 px-3 py-1.5 text-center font-mono font-bold text-sm bg-white border-2 border-indigo-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-18 px-2.5 py-1 text-center font-mono font-bold text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
                     />
                   </div>
                 </div>
 
                 {/* Calculation Preview */}
-                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs flex justify-between items-center">
-                  <span className="text-slate-600 font-medium">
-                    Each package requires <strong className="text-slate-800">{activeProduct.books.length} books</strong>.
+                <div className="bg-indigo-50/60 p-3 rounded-lg border border-indigo-100 text-xs flex justify-between items-center text-indigo-900">
+                  <span className="font-medium">
+                    Each package: <strong className="font-bold">{activeProduct.books.length} books</strong>
                   </span>
-                  <span className="font-bold text-indigo-800">
-                    Total books to pack: <strong className="font-mono text-sm">{activeProduct.books.length * targetQuantity} books</strong>
+                  <span className="font-medium">
+                    Total books to pack: <strong className="font-mono font-bold text-sm">{activeProduct.books.length * targetQuantity}</strong>
                   </span>
                 </div>
 
-                {/* Dual Options: 1) Scan books one-by-one OR 2) Direct pack without scanning */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                {/* Dual Options */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                   <button
                     onClick={handleConfirmQuantityAndStartScanning}
-                    className="py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <ScanLine size={16} />
-                    <span>Scan Books One-by-One ({targetQuantity} Pkg)</span>
+                    <ScanLine size={14} />
+                    <span>Scan Books ({targetQuantity} Pkg)</span>
                   </button>
 
                   <button
                     onClick={() => handleDirectPackWithoutScanning(targetQuantity)}
                     disabled={isSavingBatch}
-                    className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <Zap size={16} className={isSavingBatch ? 'animate-spin' : ''} />
-                    <span>Direct Pack Without Scanning ({targetQuantity} Pkg)</span>
+                    <Zap size={14} className={isSavingBatch ? 'animate-spin' : ''} />
+                    <span>Direct Pack Without Scanning</span>
                   </button>
                 </div>
               </div>
@@ -719,14 +878,14 @@ export const PreparationPage: React.FC = () => {
 
             {/* ── PHASE 2: HANDS-FREE BOOK SCANNING / MANUAL TICK ── */}
             {packagingPhase === 'SCANNING' && (
-              <div className="space-y-4">
-                {/* Early Save Status Banner if at least 1 package already completed */}
+              <div className="space-y-3.5">
+                {/* Early Save Status Banner */}
                 {completedPackagesCount > 0 && (
-                  <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-950 font-bold shadow-xs animate-in fade-in">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 flex items-center justify-between text-xs text-emerald-900 animate-in fade-in">
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-                      <span>
-                        ✓ {completedPackagesCount} Package(s) already saved to Packaged Stock!
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                      <span className="font-medium">
+                        ✓ {completedPackagesCount} Package(s) saved to Packaged Stock
                       </span>
                     </div>
                     <button
@@ -734,52 +893,53 @@ export const PreparationPage: React.FC = () => {
                         setIsPackingModalOpen(false);
                         fetchProducts();
                       }}
-                      className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold cursor-pointer transition-colors shadow-xs"
+                      className="px-2.5 py-0.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded text-[11px] font-semibold cursor-pointer transition-colors"
                     >
-                      Save & Exit Now ({completedPackagesCount} Done)
+                      Save & Exit ({completedPackagesCount})
                     </button>
                   </div>
                 )}
 
                 {/* Active Package Tracker Header */}
-                <div className="flex items-center justify-between bg-slate-900 text-white px-4 py-2.5 rounded-xl">
+                <div className="flex items-center justify-between bg-slate-800 text-white px-3 py-2 rounded-lg text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Current Package:</span>
-                    <span className="font-mono text-sm font-black text-emerald-400">
+                    <span className="text-[10px] uppercase font-semibold text-slate-400">Current:</span>
+                    <span className="font-mono font-bold text-emerald-400">
                       Package {currentPackageNum} of {targetQuantity}
                     </span>
                   </div>
-                  <div className="text-xs text-slate-300 font-medium font-mono">
-                    Total: {currentScannedCount} / {totalBooksInBatch} Books ({overallProgressPct}%)
+                  <div className="text-slate-300 font-mono text-[11px]">
+                    {currentScannedCount} / {totalBooksInBatch} Books ({overallProgressPct}%)
                   </div>
                 </div>
 
                 {/* Overall Progress Bar */}
-                <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                   <div
-                    className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
+                    className="bg-indigo-600 h-1.5 rounded-full transition-all duration-300"
                     style={{ width: `${overallProgressPct}%` }}
                   />
                 </div>
 
                 {/* List of Books for CURRENT Package */}
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase text-slate-500">
-                      Books Required for Package #{currentPackageNum}:
+                    <span className="text-[11px] font-semibold uppercase text-slate-500">
+                      Package #{currentPackageNum} Required Books:
                     </span>
                     <button
                       type="button"
                       onClick={handleTickEntirePackage}
                       disabled={isSavingBatch}
-                      className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-100/70 hover:bg-indigo-200/70 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                      title="Is package ki saari kitabon ko ek sath tick karke package complete karein"
+                      className="flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-800 bg-white border border-indigo-200 hover:bg-indigo-50 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                      title="Tick all books for this package"
                     >
-                      <Zap size={13} />
+                      <Zap size={11} />
                       <span>Tick Whole Package #{currentPackageNum}</span>
                     </button>
                   </div>
-                  <div className="space-y-2">
+
+                  <div className="space-y-1.5">
                     {activeProduct.books.map((b, idx) => {
                       const isScanned = idx < currentBookIndex;
                       const isCurrent = idx === currentBookIndex;
@@ -787,56 +947,53 @@ export const PreparationPage: React.FC = () => {
                       return (
                         <div
                           key={idx}
-                          className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                          className={`flex items-center justify-between p-2 rounded-lg border transition-all text-xs ${
                             isScanned
-                              ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-semibold'
+                              ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-medium'
                               : isCurrent
-                              ? 'bg-white border-2 border-indigo-500 shadow-md ring-2 ring-indigo-100'
-                              : 'bg-white border-slate-200 text-slate-400'
+                              ? 'bg-white border-indigo-400 shadow-2xs ring-1 ring-indigo-200'
+                              : 'bg-white border-slate-200/80 text-slate-400'
                           }`}
                         >
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
                             {isScanned ? (
-                              <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                             ) : (
-                              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                                isCurrent ? 'bg-indigo-600 text-white animate-pulse' : 'bg-slate-200 text-slate-600'
-                              }`}>
+                              <span
+                                className={`w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                                  isCurrent ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
+                                }`}
+                              >
                                 {idx + 1}
                               </span>
                             )}
-                            <div>
-                              <div className={`text-xs ${isCurrent ? 'font-black text-slate-900' : 'font-medium'}`}>
+                            <div className="min-w-0">
+                              <div className={`truncate ${isCurrent ? 'font-bold text-slate-900' : 'font-medium'}`}>
                                 {b.bookName || b.bookCode}
                               </div>
-                              <div className="font-mono text-[10px] text-slate-500">
-                                Barcode: {b.bookCode}
+                              <div className="font-mono text-[10px] text-slate-400">
+                                {b.bookCode}
                               </div>
                             </div>
                           </div>
 
-                          <div>
+                          <div className="shrink-0">
                             {isScanned ? (
-                              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg">
-                                ✓ Verified
+                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                                Done
                               </span>
                             ) : isCurrent ? (
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleManualTickBook(idx)}
-                                  disabled={isSavingBatch}
-                                  className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 cursor-pointer transition-colors"
-                                  title="Bina barcode scan kiye book verify karein"
-                                >
-                                  <Check size={14} />
-                                  <span>Manual Tick (जोड़ें)</span>
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleManualTickBook(idx)}
+                                disabled={isSavingBatch}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold rounded shadow-2xs flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                <Check size={12} />
+                                <span>Tick</span>
+                              </button>
                             ) : (
-                              <span className="text-[10px] text-slate-400 font-medium">
-                                Waiting...
-                              </span>
+                              <span className="text-[10px] text-slate-400">Waiting</span>
                             )}
                           </div>
                         </div>
@@ -851,7 +1008,7 @@ export const PreparationPage: React.FC = () => {
                     e.preventDefault();
                     if (barcodeInput.trim()) handleBookScan(barcodeInput);
                   }}
-                  className="space-y-2"
+                  className="space-y-1.5"
                 >
                   <div className="relative">
                     <input
@@ -859,14 +1016,14 @@ export const PreparationPage: React.FC = () => {
                       type="text"
                       value={barcodeInput}
                       onChange={(e) => setBarcodeInput(e.target.value.toUpperCase())}
-                      placeholder={`⚡ Scan Book ${currentBookIndex + 1} (${activeProduct.books[currentBookIndex]?.bookCode || ''}) ya click Manual Tick...`}
-                      className="w-full px-4 py-3.5 text-sm font-mono font-bold border-2 border-indigo-500 rounded-xl focus:outline-none focus:ring-4 focus:ring-indigo-100 bg-white shadow-xs"
+                      placeholder={`Scan Book ${currentBookIndex + 1} (${activeProduct.books[currentBookIndex]?.bookCode || ''}) or click Tick...`}
+                      className="w-full pl-3 pr-20 py-2.5 text-xs sm:text-sm font-mono font-bold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 bg-white"
                       autoFocus
                     />
                     <button
                       type="submit"
                       disabled={!barcodeInput.trim()}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-semibold rounded transition-colors cursor-pointer"
                     >
                       Verify
                     </button>
@@ -875,27 +1032,33 @@ export const PreparationPage: React.FC = () => {
 
                 {/* Feedback message */}
                 {scanFeedback.message && (
-                  <div className={`p-3 rounded-xl text-xs font-medium border flex items-center gap-2 ${
-                    scanFeedback.type === 'success'
-                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                      : 'bg-rose-50 border-rose-300 text-rose-900'
-                  }`}>
-                    {scanFeedback.type === 'success' ? <CheckCircle2 size={16} className="text-emerald-600 shrink-0" /> : <AlertTriangle size={16} className="text-rose-600 shrink-0" />}
-                    <span>{scanFeedback.message}</span>
+                  <div
+                    className={`p-2 rounded-lg text-xs font-medium border flex items-center gap-2 ${
+                      scanFeedback.type === 'success'
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-rose-50 border-rose-200 text-rose-900'
+                    }`}
+                  >
+                    {scanFeedback.type === 'success' ? (
+                      <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertTriangle size={14} className="text-rose-600 shrink-0" />
+                    )}
+                    <span className="truncate">{scanFeedback.message}</span>
                   </div>
                 )}
 
-                {/* Additional Quick Controls during scanning */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-slate-200 text-xs">
+                {/* Footer Controls during scanning */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
                   {targetQuantity > currentPackageNum ? (
                     <button
                       type="button"
                       onClick={handleDirectPackRemaining}
                       disabled={isSavingBatch}
-                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold transition-colors cursor-pointer"
+                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg font-medium transition-colors cursor-pointer text-xs"
                     >
-                      <Zap size={14} className="text-amber-600" />
-                      <span>Direct Pack Remaining ({targetQuantity - completedPackagesCount} Pkg) Without Scanning</span>
+                      <Zap size={12} className="text-amber-600" />
+                      <span>Direct Pack Remaining ({targetQuantity - completedPackagesCount} Pkg)</span>
                     </button>
                   ) : (
                     <div />
@@ -908,9 +1071,9 @@ export const PreparationPage: React.FC = () => {
                         setIsPackingModalOpen(false);
                         fetchProducts();
                       }}
-                      className="w-full sm:w-auto px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-colors cursor-pointer"
+                      className="w-full sm:w-auto px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors cursor-pointer text-xs"
                     >
-                      Cancel Remaining & Exit ({completedPackagesCount} Saved)
+                      Exit ({completedPackagesCount} Saved)
                     </button>
                   )}
                 </div>
@@ -919,52 +1082,51 @@ export const PreparationPage: React.FC = () => {
 
             {/* ── PHASE 3: BATCH COMPLETED ── */}
             {packagingPhase === 'COMPLETED' && (
-              <div className="text-center py-6 space-y-4 animate-in zoom-in-95">
-                <div className="relative flex items-center justify-center w-20 h-20 mx-auto">
-                  <div className="absolute inset-0 rounded-full bg-emerald-400/20 animate-ping" />
-                  <div className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center text-white shadow-lg">
-                    <CheckCircle2 size={36} />
-                  </div>
+              <div className="text-center py-5 space-y-3 animate-in zoom-in-95">
+                <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-2xs">
+                  <CheckCircle2 size={30} />
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-black text-slate-900">
+                  <h3 className="text-lg font-bold text-slate-900">
                     Packaging Batch Complete!
                   </h3>
-                  <p className="text-xs font-semibold text-emerald-700 mt-1">
-                    ✓ {completedPackagesCount || targetQuantity} package(s) of "{activeProduct.productCode}" are packed and ready in parcel packaging.
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {completedPackagesCount || targetQuantity} package(s) of "{activeProduct.productCode}" are now in ready parcel stock.
                   </p>
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs max-w-sm mx-auto text-left space-y-1.5">
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs max-w-sm mx-auto text-left space-y-1">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Product:</span>
-                    <span className="font-bold text-slate-800">{activeProduct.productName}</span>
+                    <span className="font-semibold text-slate-800 truncate pl-2">{activeProduct.productName}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Packages Prepared:</span>
-                    <span className="font-mono font-black text-indigo-700">+{completedPackagesCount || targetQuantity} Sets</span>
+                    <span className="font-mono font-bold text-indigo-700">+{completedPackagesCount || targetQuantity} Sets</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Total Books Scanned/Added:</span>
-                    <span className="font-mono font-bold text-slate-800">{activeProduct.books.length * (completedPackagesCount || targetQuantity)} books</span>
+                    <span className="text-slate-500">Books Added:</span>
+                    <span className="font-mono font-semibold text-slate-800">
+                      {activeProduct.books.length * (completedPackagesCount || targetQuantity)} books
+                    </span>
                   </div>
-                  <div className="flex justify-between pt-1 border-t border-slate-200">
-                    <span className="text-slate-700 font-bold">New Packaged Stock:</span>
-                    <span className="font-mono font-black text-emerald-700">
-                      {activeProduct.packagedStock} ready sets
+                  <div className="flex justify-between pt-1 border-t border-slate-200 font-bold">
+                    <span className="text-slate-700">New Packaged Stock:</span>
+                    <span className="font-mono text-emerald-700">
+                      {activeProduct.packagedStock} sets
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-center gap-3 pt-2">
+                <div className="flex items-center justify-center gap-2 pt-2">
                   <button
                     onClick={() => {
                       setPackagingPhase('SELECT_QTY');
                       setTargetQuantity(1);
                       setCompletedPackagesCount(0);
                     }}
-                    className="px-4 py-2.5 text-xs font-bold rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+                    className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer"
                   >
                     Pack Another Batch
                   </button>
@@ -973,7 +1135,7 @@ export const PreparationPage: React.FC = () => {
                       setIsPackingModalOpen(false);
                       fetchProducts();
                     }}
-                    className="px-6 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all cursor-pointer"
+                    className="px-5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all cursor-pointer"
                   >
                     Done & Close
                   </button>

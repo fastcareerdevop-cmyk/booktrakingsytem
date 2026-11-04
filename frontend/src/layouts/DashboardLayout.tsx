@@ -114,16 +114,16 @@ export const DashboardLayout: React.FC = () => {
           </div>
 
           {/* User Profile Pill in Sidebar */}
-          <div className="px-4 py-3 mx-3 my-3 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center font-semibold text-sm">
-              <UserCheck className="w-5 h-5" />
+          <div className="px-3 py-2.5 mx-3 my-2.5 rounded-xl bg-slate-800/90 border border-slate-700/70 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 flex items-center justify-center font-semibold text-sm shrink-0">
+              <UserCheck className="w-4 h-4" />
             </div>
-            <div className="overflow-hidden">
-              <p className="text-xs font-semibold text-white truncate">{user?.name || 'User'}</p>
+            <div className="overflow-hidden min-w-0">
+              <p className="text-xs font-bold text-white truncate">{user?.name || 'User'}</p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span
-                  className={`text-[10px] font-medium px-1.5 py-0.2 rounded ${
-                    isAdmin ? 'bg-red-500/20 text-red-300' : 'bg-emerald-500/20 text-emerald-300'
+                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                    isAdmin ? 'bg-red-500/25 text-red-300' : 'bg-emerald-500/25 text-emerald-300'
                   }`}
                 >
                   {user?.role}
@@ -134,7 +134,7 @@ export const DashboardLayout: React.FC = () => {
           </div>
 
           {/* Navigation Links */}
-          <nav className="px-3 py-2 space-y-1 overflow-y-auto max-h-[calc(100vh-230px)]">
+          <nav className="px-3 py-1 space-y-0.5 overflow-y-auto max-h-[calc(100vh-230px)]">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
               return (
@@ -142,14 +142,14 @@ export const DashboardLayout: React.FC = () => {
                   key={item.path}
                   to={item.path}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                     isActive
-                      ? 'bg-red-600 text-white shadow-sm font-semibold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-red-600 text-white shadow-xs font-semibold'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
                   }`}
                 >
-                  {item.icon}
-                  <span>{item.label}</span>
+                  <span className="w-4 h-4 shrink-0 flex items-center justify-center">{item.icon}</span>
+                  <span className="truncate">{item.label}</span>
                 </NavLink>
               );
             })}
