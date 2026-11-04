@@ -65,6 +65,7 @@ export const PreparationPage: React.FC = () => {
   const [activeProduct, setActiveProduct] = useState<PreparationProduct | null>(null);
   const [isPackingModalOpen, setIsPackingModalOpen] = useState(false);
   const [targetQuantity, setTargetQuantity] = useState<number>(1);
+  const [quantityInput, setQuantityInput] = useState<string>('1');
   const [packagingPhase, setPackagingPhase] = useState<'SELECT_QTY' | 'SCANNING' | 'COMPLETED'>('SELECT_QTY');
 
   // Scanning Progress State
@@ -149,6 +150,7 @@ export const PreparationPage: React.FC = () => {
   const handleStartPackaging = (product: PreparationProduct) => {
     setActiveProduct(product);
     setTargetQuantity(1);
+    setQuantityInput('1');
     setPackagingPhase('SELECT_QTY');
     setCurrentPackageNum(1);
     setCurrentBookIndex(0);
@@ -805,42 +807,93 @@ export const PreparationPage: React.FC = () => {
             {/* ── PHASE 1: SELECT TARGET QUANTITY ── */}
             {packagingPhase === 'SELECT_QTY' && (
               <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
-                    Select Target Quantity (कितने पैकेट पैक करने हैं?)
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Enter Package Quantity (पैकेट की संख्या डालें)
                   </h4>
-                  <p className="text-xs text-slate-500">
-                    Kitne ready combo sets packaging me tayyar karke rakhne hain?
+                  <p className="text-xs text-slate-500 mb-4">
+                    Type the number of ready packages you want to prepare.
                   </p>
 
-                  {/* Quick Select Buttons */}
-                  <div className="flex items-center justify-center gap-1.5 mt-3 flex-wrap">
-                    {[1, 3, 5, 10, 20, 50].map((qty) => (
-                      <button
-                        key={qty}
-                        onClick={() => setTargetQuantity(qty)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          targetQuantity === qty
-                            ? 'bg-indigo-600 text-white shadow-2xs'
-                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {qty} {qty === 1 ? 'Package' : 'Packages'}
-                      </button>
-                    ))}
+                  {/* Main Simple Text / Number Box with Steppers */}
+                  <div className="flex items-center justify-center gap-2 max-w-xs mx-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = Math.max(1, targetQuantity - 1);
+                        setTargetQuantity(next);
+                        setQuantityInput(String(next));
+                      }}
+                      className="w-10 h-10 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center font-bold text-lg cursor-pointer transition-colors shadow-2xs select-none"
+                      title="Decrease by 1"
+                    >
+                      −
+                    </button>
+
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min={1}
+                        max={10000}
+                        value={quantityInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setQuantityInput(val);
+                          const num = parseInt(val, 10);
+                          if (!isNaN(num) && num > 0) {
+                            setTargetQuantity(num);
+                          }
+                        }}
+                        onBlur={() => {
+                          const num = parseInt(quantityInput, 10);
+                          if (isNaN(num) || num < 1) {
+                            setQuantityInput('1');
+                            setTargetQuantity(1);
+                          } else {
+                            setQuantityInput(String(num));
+                            setTargetQuantity(num);
+                          }
+                        }}
+                        placeholder="1"
+                        className="w-full h-10 px-3 text-center font-mono font-bold text-lg bg-white border-2 border-indigo-500 rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-100 text-slate-900 shadow-2xs"
+                        autoFocus
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = targetQuantity + 1;
+                        setTargetQuantity(next);
+                        setQuantityInput(String(next));
+                      }}
+                      className="w-10 h-10 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center font-bold text-lg cursor-pointer transition-colors shadow-2xs select-none"
+                      title="Increase by 1"
+                    >
+                      +
+                    </button>
                   </div>
 
-                  {/* Custom Input */}
-                  <div className="mt-3 flex items-center justify-center gap-2 text-xs">
-                    <span className="text-slate-500 font-medium">Or enter custom count:</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={500}
-                      value={targetQuantity}
-                      onChange={(e) => setTargetQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      className="w-18 px-2.5 py-1 text-center font-mono font-bold text-xs bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500"
-                    />
+                  {/* Quick Preset Chips */}
+                  <div className="flex items-center justify-center gap-1.5 mt-3.5 flex-wrap">
+                    <span className="text-[11px] text-slate-400 font-medium mr-1">Quick Select:</span>
+                    {[1, 3, 5, 10, 20, 50, 100].map((qty) => (
+                      <button
+                        key={qty}
+                        type="button"
+                        onClick={() => {
+                          setTargetQuantity(qty);
+                          setQuantityInput(String(qty));
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                          targetQuantity === qty
+                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {qty}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -1124,6 +1177,7 @@ export const PreparationPage: React.FC = () => {
                     onClick={() => {
                       setPackagingPhase('SELECT_QTY');
                       setTargetQuantity(1);
+                      setQuantityInput('1');
                       setCompletedPackagesCount(0);
                     }}
                     className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer"
