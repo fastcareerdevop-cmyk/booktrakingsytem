@@ -310,3 +310,94 @@ export async function dispatchPackageV2(req: AuthenticatedRequest, res: Response
     next(error);
   }
 }
+
+/**
+ * Direct update or edit of packaged stock for a product
+ * Allows increasing, decreasing, or directly setting packagedStock
+ */
+export async function updatePackagedStock(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const { productCode, packagedStock } = req.body;
+    const cleanProductCode = (productCode || '').trim().toUpperCase();
+    const newQty = Math.max(0, parseInt(packagedStock, 10) || 0);
+
+    if (!cleanProductCode) {
+      return errorResponse(res, 'Product code is required', 'PRODUCT_CODE_REQUIRED', 400);
+    }
+
+    let prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    if (!prep) {
+      prep = new PackagePreparation({
+        productCode: cleanProductCode,
+        productName: cleanProductCode,
+        books: [],
+        packagedStock: newQty,
+        shelfStock: 0,
+        totalAvailableStock: newQty,
+        totalBatchesPacked: 0,
+        history: [],
+      });
+    } else {
+      prep.packagedStock = newQty;
+    }
+
+    await prep.save();
+
+    if (req.user) {
+      await logAudit({
+        actorUserId: req.user.id,
+        action: 'PACKAGED_STOCK_UPDATED',
+        entityType: 'PackagePreparation',
+        entityId: prep._id.toString(),
+        metadata: {
+          productCode: cleanProductCode,
+          newPackagedStock: newQty,
+        },
+      });
+    }
+
+    return successResponse(res, `Packaged stock for "${cleanProductCode}" updated to ${newQty}.`, {
+      productCode: cleanProductCode,
+      packagedStock: prep.packagedStock,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * Reset / Delete packaged stock of a product (sets packagedStock to 0)
+ */
+export async function resetPackagedStock(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const { productCode } = req.body;
+    const cleanProductCode = (productCode || '').trim().toUpperCase();
+
+    if (!cleanProductCode) {
+      return errorResponse(res, 'Product code is required', 'PRODUCT_CODE_REQUIRED', 400);
+    }
+
+    const prep = await PackagePreparation.findOne({ productCode: cleanProductCode });
+    if (prep) {
+      prep.packagedStock = 0;
+      await prep.save();
+    }
+
+    if (req.user && prep) {
+      await logAudit({
+        actorUserId: req.user.id,
+        action: 'PACKAGED_STOCK_RESET',
+        entityType: 'PackagePreparation',
+        entityId: prep._id.toString(),
+        metadata: { productCode: cleanProductCode },
+      });
+    }
+
+    return successResponse(res, `Packaged stock for "${cleanProductCode}" reset to 0.`, {
+      productCode: cleanProductCode,
+      packagedStock: 0,
+    });
+  } catch (error) {
+    next(error);
+  }
+}

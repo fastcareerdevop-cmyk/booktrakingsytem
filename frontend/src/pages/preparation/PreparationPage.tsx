@@ -18,6 +18,8 @@ import {
   BookOpen,
   SlidersHorizontal,
   PackageCheck,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import api from '../../services/api';
 import {
@@ -43,6 +45,7 @@ interface PreparationProduct {
   shelfStock: number;
   totalAvailableStock: number;
   totalBatchesPacked: number;
+  packableSets?: number;
   lastPackedAt?: string;
 }
 
@@ -76,6 +79,11 @@ export const PreparationPage: React.FC = () => {
   const [barcodeInput, setBarcodeInput] = useState('');
   const [scanFeedback, setScanFeedback] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
   const [isSavingBatch, setIsSavingBatch] = useState(false);
+
+  // Edit Packaged Stock Modal State
+  const [editingProduct, setEditingProduct] = useState<PreparationProduct | null>(null);
+  const [editStockValue, setEditStockValue] = useState<string>('0');
+  const [isSavingStockEdit, setIsSavingStockEdit] = useState(false);
 
   const scanInputRef = useRef<HTMLInputElement>(null);
 
@@ -145,6 +153,85 @@ export const PreparationPage: React.FC = () => {
         return a.productCode.localeCompare(b.productCode, undefined, { numeric: true });
       });
   }, [products, searchQuery, statusFilter, sortBy]);
+
+  // Open Edit Packaged Stock Modal
+  const handleOpenEditStock = (product: PreparationProduct) => {
+    setEditingProduct(product);
+    setEditStockValue(String(product.packagedStock || 0));
+  };
+
+  // Save Packaged Stock Edit
+  const handleSaveStockEdit = async () => {
+    if (!editingProduct) return;
+    const parsed = parseInt(editStockValue, 10);
+    const newQty = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+
+    setIsSavingStockEdit(true);
+    try {
+      const res = await api.post('/preparation/update-stock', {
+        productCode: editingProduct.productCode,
+        packagedStock: newQty,
+      });
+
+      if (res.data.success) {
+        if (soundEnabled) playSuccessChime();
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.productCode !== editingProduct.productCode) return p;
+            const maxSets = p.packableSets ?? (p.shelfStock + p.packagedStock);
+            const updatedShelf = Math.max(0, maxSets - newQty);
+            return {
+              ...p,
+              packagedStock: newQty,
+              shelfStock: updatedShelf,
+              totalAvailableStock: updatedShelf + newQty,
+            };
+          })
+        );
+        setEditingProduct(null);
+        fetchProducts();
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update packaged stock');
+    } finally {
+      setIsSavingStockEdit(false);
+    }
+  };
+
+  // Reset / Delete Packaged Stock to 0
+  const handleDeletePackagedStock = async (product: PreparationProduct) => {
+    if ((product.packagedStock || 0) <= 0) return;
+
+    const confirmed = window.confirm(
+      `"${product.productCode}" ke sabhi ${product.packagedStock} ready package delete / 0 karna chahte hain? Yeh books wapas shelf stock me count hongi.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await api.post('/preparation/reset-stock', {
+        productCode: product.productCode,
+      });
+
+      if (res.data.success) {
+        if (soundEnabled) playSuccessChime();
+        setProducts((prev) =>
+          prev.map((p) => {
+            if (p.productCode !== product.productCode) return p;
+            const restoredShelf = p.packableSets ?? (p.shelfStock + p.packagedStock);
+            return {
+              ...p,
+              packagedStock: 0,
+              shelfStock: restoredShelf,
+              totalAvailableStock: restoredShelf,
+            };
+          })
+        );
+        fetchProducts();
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to reset packaged stock');
+    }
+  };
 
   // Open Packing Station for a product
   const handleStartPackaging = (product: PreparationProduct) => {
@@ -761,8 +848,31 @@ export const PreparationPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Card Action Button */}
-                <div className="p-4 pt-0">
+                {/* Action Buttons: Edit / Delete Package Stock + Start Packaging */}
+                <div className="p-4 pt-0 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditStock(product)}
+                      className="flex-1 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200"
+                      title="Packaged stock count kam ya zyada karein"
+                    >
+                      <Pencil size={12} className="text-slate-500" />
+                      <span>Edit Package</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePackagedStock(product)}
+                      disabled={product.packagedStock <= 0}
+                      className="py-1.5 px-2.5 bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer border border-slate-200 hover:border-rose-200"
+                      title={product.packagedStock > 0 ? "Packaged stock 0 / delete karein" : "Abhi koi package ready nahi hai"}
+                    >
+                      <Trash2 size={12} />
+                      <span>Delete (0)</span>
+                    </button>
+                  </div>
+
                   <button
                     onClick={() => handleStartPackaging(product)}
                     className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs font-semibold rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
@@ -1196,6 +1306,109 @@ export const PreparationPage: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── 6. Edit Packaged Stock Modal ─────────────────────────────────────── */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 relative overflow-hidden animate-in zoom-in-95 duration-200 text-slate-800">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100 mb-3.5">
+              <div className="min-w-0 pr-2">
+                <span className="font-mono text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-200 inline-block mb-1">
+                  {editingProduct.productCode}
+                </span>
+                <h3 className="text-sm font-bold text-slate-900 leading-tight">
+                  Edit Packaged Stock
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5 truncate max-w-xs" title={editingProduct.productName}>
+                  {editingProduct.productName}
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingProduct(null)}
+                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-center">
+                <div className="text-[11px] font-semibold uppercase text-slate-600 mb-1">
+                  Packaged Sets Count (पैकेज संख्या कम या ज्यादा करें)
+                </div>
+                <p className="text-[11px] text-slate-400 mb-3">
+                  Type new count or use − / + buttons
+                </p>
+
+                {/* Stepper + Input */}
+                <div className="flex items-center justify-center gap-2 max-w-xs mx-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = parseInt(editStockValue, 10) || 0;
+                      setEditStockValue(String(Math.max(0, current - 1)));
+                    }}
+                    className="w-9 h-9 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center font-bold text-base cursor-pointer shadow-2xs select-none"
+                    title="Decrease by 1"
+                  >
+                    −
+                  </button>
+
+                  <input
+                    type="number"
+                    min={0}
+                    max={10000}
+                    value={editStockValue}
+                    onChange={(e) => setEditStockValue(e.target.value)}
+                    className="w-24 h-9 px-2 text-center font-mono font-bold text-base bg-white border-2 border-indigo-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-100 text-slate-900 shadow-2xs"
+                    autoFocus
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = parseInt(editStockValue, 10) || 0;
+                      setEditStockValue(String(current + 1));
+                    }}
+                    className="w-9 h-9 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center font-bold text-base cursor-pointer shadow-2xs select-none"
+                    title="Increase by 1"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div className="text-[11px] text-slate-500 mt-2 font-medium">
+                  Current Packaged: <strong className="font-mono text-slate-800">{editingProduct.packagedStock} sets</strong>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed bg-amber-50/60 p-2.5 rounded-lg border border-amber-200/80 text-amber-900">
+                💡 <strong>Note:</strong> Package count kam ya zyada karne par bachi hui kitabein automatically shelf stock me adjust ho jayengi.
+              </p>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveStockEdit}
+                  disabled={isSavingStockEdit}
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5"
+                >
+                  {isSavingStockEdit ? <RefreshCw size={12} className="animate-spin" /> : <Check size={13} />}
+                  <span>Save Stock (सेव करें)</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
