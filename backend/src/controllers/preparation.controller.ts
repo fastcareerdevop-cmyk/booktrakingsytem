@@ -110,9 +110,38 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
       });
     }
 
-    const totalPackagedSets = preparations.reduce((acc, p) => acc + (p.packagedStock || 0), 0);
+    // Calculate total individual book copies inside all ready packaged sets
+    const bookPackagedMap = new Map<string, number>();
+    let totalPackagedSets = 0;
+
+    for (const prep of preparations) {
+      const pQty = prep.packagedStock || 0;
+      if (pQty <= 0) continue;
+      totalPackagedSets += pQty;
+
+      const pCode = (prep.productCode || '').toUpperCase().trim();
+      const pData = allProductsMap.get(pCode);
+      const booksList = (pData && pData.books.length > 0)
+        ? pData.books
+        : (prep.books || []).map((b: any) => b.bookCode);
+
+      for (const bCode of booksList) {
+        const clean = normalizeBookCode(bCode);
+        bookPackagedMap.set(clean, (bookPackagedMap.get(clean) || 0) + pQty);
+      }
+    }
+
+    let totalPackagedBooks = 0;
+    for (const bs of allBookStocks) {
+      if (bs.availableQuantity > 0) {
+        const clean = normalizeBookCode(bs.bookCode);
+        const pQty = bookPackagedMap.get(clean) || 0;
+        totalPackagedBooks += Math.min(bs.availableQuantity, pQty);
+      }
+    }
+
     const totalWarehouseAvailable = allBookStocks.reduce((acc, b) => acc + (b.availableQuantity || 0), 0);
-    const totalShelfStock = Math.max(0, totalWarehouseAvailable - totalPackagedSets);
+    const totalShelfStock = Math.max(0, totalWarehouseAvailable - totalPackagedBooks);
 
     return successResponse(res, 'Preparation products fetched successfully', {
       products: resultList,
@@ -121,6 +150,7 @@ export async function getProducts(req: AuthenticatedRequest, res: Response, next
         totalAvailableStock: totalWarehouseAvailable,
         shelfStock: totalShelfStock,
         packagedStock: totalPackagedSets,
+        packagedBooksCount: totalPackagedBooks,
       },
     });
   } catch (error) {
@@ -250,17 +280,58 @@ export async function packBatch(req: AuthenticatedRequest, res: Response, next: 
  */
 export async function getStockSummary(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const preparations = await PackagePreparation.find({}).lean();
-    const allBookStocks = await BookStock.find({}).lean();
+    const [preparations, allBookStocks, catalogProducts] = await Promise.all([
+      PackagePreparation.find({}).lean(),
+      BookStock.find({}).lean(),
+      ProductCatalog.find({}).lean(),
+    ]);
 
-    const totalPackagedSets = preparations.reduce((acc, p) => acc + (p.packagedStock || 0), 0);
+    const catalogMap = new Map<string, string[]>();
+    for (const cp of catalogProducts) {
+      if (cp.productCode && cp.books) {
+        catalogMap.set(cp.productCode.toUpperCase().trim(), cp.books.map((b: any) => normalizeBookCode(b)));
+      }
+    }
+
+    const bookPackagedMap = new Map<string, number>();
+    let totalPackagedSets = 0;
+
+    for (const prep of preparations) {
+      const pQty = prep.packagedStock || 0;
+      if (pQty <= 0) continue;
+      totalPackagedSets += pQty;
+
+      const pCode = (prep.productCode || '').toUpperCase().trim();
+      let booksForProduct: string[] = [];
+      if (prep.books && prep.books.length > 0) {
+        booksForProduct = prep.books.map((b: any) => normalizeBookCode(b.bookCode));
+      } else if (catalogMap.has(pCode)) {
+        booksForProduct = catalogMap.get(pCode) || [];
+      }
+
+      for (const bCode of booksForProduct) {
+        const clean = normalizeBookCode(bCode);
+        bookPackagedMap.set(clean, (bookPackagedMap.get(clean) || 0) + pQty);
+      }
+    }
+
+    let totalPackagedBooks = 0;
+    for (const bs of allBookStocks) {
+      if (bs.availableQuantity > 0) {
+        const clean = normalizeBookCode(bs.bookCode);
+        const pQty = bookPackagedMap.get(clean) || 0;
+        totalPackagedBooks += Math.min(bs.availableQuantity, pQty);
+      }
+    }
+
     const totalWarehouseAvailable = allBookStocks.reduce((acc, b) => acc + (b.availableQuantity || 0), 0);
-    const totalShelfStock = Math.max(0, totalWarehouseAvailable - totalPackagedSets);
+    const totalShelfStock = Math.max(0, totalWarehouseAvailable - totalPackagedBooks);
 
     return successResponse(res, 'Stock summary retrieved', {
       totalAvailableStock: totalWarehouseAvailable,
       shelfStock: totalShelfStock,
       packagedStock: totalPackagedSets,
+      packagedBooksCount: totalPackagedBooks,
       totalProductsPrepared: preparations.length,
       preparations,
     });

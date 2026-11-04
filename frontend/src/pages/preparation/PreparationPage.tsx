@@ -62,6 +62,7 @@ export const PreparationPage: React.FC = () => {
     totalAvailableStock: 0,
     shelfStock: 0,
     packagedStock: 0,
+    packagedBooksCount: 0,
   });
 
   // Active Packaging Modal State
@@ -100,10 +101,18 @@ export const PreparationPage: React.FC = () => {
         setProducts(productsRes.data.data.products || []);
       }
       if (summaryRes.data.success) {
+        const sumData = summaryRes.data.data;
+        const totalAvail = sumData.totalAvailableStock || 0;
+        const shelf = sumData.shelfStock || 0;
+        const pkgBooks = sumData.packagedBooksCount !== undefined
+          ? sumData.packagedBooksCount
+          : Math.max(0, totalAvail - shelf);
+
         setStockSummary({
-          totalAvailableStock: summaryRes.data.data.totalAvailableStock || 0,
-          shelfStock: summaryRes.data.data.shelfStock || 0,
-          packagedStock: summaryRes.data.data.packagedStock || 0,
+          totalAvailableStock: totalAvail,
+          shelfStock: shelf,
+          packagedStock: sumData.packagedStock || 0,
+          packagedBooksCount: pkgBooks,
         });
       }
     } catch (err) {
@@ -597,7 +606,7 @@ export const PreparationPage: React.FC = () => {
               {stockSummary.packagedStock}
             </div>
             <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-              Ready combo packages for dispatch
+              Ready combo sets ({stockSummary.packagedBooksCount} books)
             </div>
           </div>
         </div>
@@ -620,7 +629,7 @@ export const PreparationPage: React.FC = () => {
               {stockSummary.shelfStock}
             </div>
             <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
-              Open books resting on shelves
+              Open loose books resting on shelves
             </div>
           </div>
         </div>
@@ -643,7 +652,7 @@ export const PreparationPage: React.FC = () => {
               {stockSummary.totalAvailableStock}
             </div>
             <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5 font-mono">
-              {stockSummary.shelfStock} Shelf + {stockSummary.packagedStock} Packaged
+              {stockSummary.shelfStock} Shelf + {stockSummary.packagedBooksCount} in Packets
             </div>
           </div>
         </div>
