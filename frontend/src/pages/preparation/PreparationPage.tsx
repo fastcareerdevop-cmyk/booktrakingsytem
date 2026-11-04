@@ -67,8 +67,8 @@ export const PreparationPage: React.FC = () => {
   // Active Packaging Modal State
   const [activeProduct, setActiveProduct] = useState<PreparationProduct | null>(null);
   const [isPackingModalOpen, setIsPackingModalOpen] = useState(false);
-  const [targetQuantity, setTargetQuantity] = useState<number>(1);
-  const [quantityInput, setQuantityInput] = useState<string>('1');
+  const [targetQuantity, setTargetQuantity] = useState<number>(0);
+  const [quantityInput, setQuantityInput] = useState<string>('');
   const [packagingPhase, setPackagingPhase] = useState<'SELECT_QTY' | 'SCANNING' | 'COMPLETED'>('SELECT_QTY');
 
   // Scanning Progress State
@@ -236,8 +236,8 @@ export const PreparationPage: React.FC = () => {
   // Open Packing Station for a product
   const handleStartPackaging = (product: PreparationProduct) => {
     setActiveProduct(product);
-    setTargetQuantity(1);
-    setQuantityInput('1');
+    setTargetQuantity(0);
+    setQuantityInput('');
     setPackagingPhase('SELECT_QTY');
     setCurrentPackageNum(1);
     setCurrentBookIndex(0);
@@ -250,7 +250,12 @@ export const PreparationPage: React.FC = () => {
 
   // Begin Scanning for selected target quantity
   const handleConfirmQuantityAndStartScanning = () => {
-    if (targetQuantity <= 0) return;
+    const qty = parseInt(quantityInput, 10) || targetQuantity;
+    if (!qty || qty <= 0) {
+      alert('Kripya package ki sankhya type karein (e.g. 5, 10)');
+      return;
+    }
+    setTargetQuantity(qty);
     setPackagingPhase('SCANNING');
     setCurrentPackageNum(1);
     setCurrentBookIndex(0);
@@ -259,12 +264,12 @@ export const PreparationPage: React.FC = () => {
     setBarcodeInput('');
     setScanFeedback({
       type: 'success',
-      message: `Packaging started for ${targetQuantity} package(s). Scan Book 1 or click "Manual Tick" to begin!`,
+      message: `Packaging started for ${qty} package(s). Scan Book 1 or click "Manual Tick" to begin!`,
     });
 
     if (soundEnabled) {
       playSuccessChime();
-      speakVoiceAnnouncement(`Packaging started for ${targetQuantity} sets. Please scan or click books one by one.`);
+      speakVoiceAnnouncement(`Packaging started for ${qty} sets. Please scan or click books one by one.`);
     }
 
     setTimeout(() => {
@@ -324,8 +329,12 @@ export const PreparationPage: React.FC = () => {
   };
 
   // Direct batch pack without scanning
-  const handleDirectPackWithoutScanning = async (qty: number) => {
-    if (!activeProduct || qty <= 0) return;
+  const handleDirectPackWithoutScanning = async (overrideQty?: number) => {
+    const qty = overrideQty !== undefined && overrideQty > 0 ? overrideQty : (parseInt(quantityInput, 10) || targetQuantity);
+    if (!activeProduct || !qty || qty <= 0) {
+      alert('Kripya package ki sankhya type karein (e.g. 5, 10)');
+      return;
+    }
     setIsSavingBatch(true);
     try {
       const res = await api.post('/preparation/pack-batch', {
@@ -925,63 +934,23 @@ export const PreparationPage: React.FC = () => {
                     Type the number of ready packages you want to prepare.
                   </p>
 
-                  {/* Main Simple Text / Number Box with Steppers */}
-                  <div className="flex items-center justify-center gap-2 max-w-xs mx-auto">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = Math.max(1, targetQuantity - 1);
-                        setTargetQuantity(next);
-                        setQuantityInput(String(next));
+                  {/* Clean Simple Type Box */}
+                  <div className="max-w-xs mx-auto">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={quantityInput}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, ''); // Digits only
+                        setQuantityInput(val);
+                        const num = parseInt(val, 10);
+                        setTargetQuantity(!isNaN(num) && num > 0 ? num : 0);
                       }}
-                      className="w-10 h-10 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center font-bold text-lg cursor-pointer transition-colors shadow-2xs select-none"
-                      title="Decrease by 1"
-                    >
-                      −
-                    </button>
-
-                    <div className="relative flex-1">
-                      <input
-                        type="number"
-                        min={1}
-                        max={10000}
-                        value={quantityInput}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setQuantityInput(val);
-                          const num = parseInt(val, 10);
-                          if (!isNaN(num) && num > 0) {
-                            setTargetQuantity(num);
-                          }
-                        }}
-                        onBlur={() => {
-                          const num = parseInt(quantityInput, 10);
-                          if (isNaN(num) || num < 1) {
-                            setQuantityInput('1');
-                            setTargetQuantity(1);
-                          } else {
-                            setQuantityInput(String(num));
-                            setTargetQuantity(num);
-                          }
-                        }}
-                        placeholder="1"
-                        className="w-full h-10 px-3 text-center font-mono font-bold text-lg bg-white border-2 border-indigo-500 rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-100 text-slate-900 shadow-2xs"
-                        autoFocus
-                      />
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = targetQuantity + 1;
-                        setTargetQuantity(next);
-                        setQuantityInput(String(next));
-                      }}
-                      className="w-10 h-10 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center justify-center font-bold text-lg cursor-pointer transition-colors shadow-2xs select-none"
-                      title="Increase by 1"
-                    >
-                      +
-                    </button>
+                      placeholder="Type count here (e.g. 5, 10)..."
+                      className="w-full h-11 px-4 text-center font-mono font-bold text-lg bg-white border-2 border-indigo-500 rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-100 text-slate-900 placeholder:text-slate-400 placeholder:font-normal placeholder:text-xs shadow-2xs transition-all"
+                      autoFocus
+                    />
                   </div>
 
                   {/* Quick Preset Chips */}
@@ -996,7 +965,7 @@ export const PreparationPage: React.FC = () => {
                           setQuantityInput(String(qty));
                         }}
                         className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                          targetQuantity === qty
+                          quantityInput === String(qty)
                             ? 'bg-indigo-600 text-white shadow-2xs'
                             : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                         }`}
@@ -1013,7 +982,10 @@ export const PreparationPage: React.FC = () => {
                     Each package: <strong className="font-bold">{activeProduct.books.length} books</strong>
                   </span>
                   <span className="font-medium">
-                    Total books to pack: <strong className="font-mono font-bold text-sm">{activeProduct.books.length * targetQuantity}</strong>
+                    Total books to pack:{' '}
+                    <strong className="font-mono font-bold text-sm">
+                      {targetQuantity > 0 ? activeProduct.books.length * targetQuantity : '—'}
+                    </strong>
                   </span>
                 </div>
 
@@ -1024,11 +996,11 @@ export const PreparationPage: React.FC = () => {
                     className="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <ScanLine size={14} />
-                    <span>Scan Books ({targetQuantity} Pkg)</span>
+                    <span>Scan Books {targetQuantity > 0 ? `(${targetQuantity} Pkg)` : ''}</span>
                   </button>
 
                   <button
-                    onClick={() => handleDirectPackWithoutScanning(targetQuantity)}
+                    onClick={() => handleDirectPackWithoutScanning()}
                     disabled={isSavingBatch}
                     className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
@@ -1286,8 +1258,8 @@ export const PreparationPage: React.FC = () => {
                   <button
                     onClick={() => {
                       setPackagingPhase('SELECT_QTY');
-                      setTargetQuantity(1);
-                      setQuantityInput('1');
+                      setTargetQuantity(0);
+                      setQuantityInput('');
                       setCompletedPackagesCount(0);
                     }}
                     className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer"
