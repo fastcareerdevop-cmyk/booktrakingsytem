@@ -2,12 +2,13 @@ import { Router } from 'express';
 import * as dispatchController from '../controllers/dispatch.controller';
 import { authenticate, requireRole } from '../middleware/auth';
 import { dispatchRateLimiter } from '../middleware/rateLimiter';
+import { requireActiveAccess, requirePagePermission } from '../middleware/rbac';
 const router = Router();
 
-router.use(authenticate);
+router.use(authenticate, requireActiveAccess());
 
 // Dispatch verification is used by Employees & Admin
-router.post('/verify', requireRole('EMPLOYEE', 'ADMIN'), dispatchRateLimiter, dispatchController.verifyAndDispatch);
+router.post('/verify', requireRole('EMPLOYEE', 'ADMIN'), requirePagePermission('dispatch_entry'), dispatchRateLimiter, dispatchController.verifyAndDispatch);
 
 // Personal dispatch history for employee/admin
 router.get('/my-history', requireRole('EMPLOYEE', 'ADMIN'), dispatchController.getMyHistory);

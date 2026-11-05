@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import api from '../services/api';
 import { Button } from '../components/common/Button';
-import { BookOpenCheck, Lock, Mail, Shield, User } from 'lucide-react';
+import { BookOpenCheck, Lock, Mail, Shield, User, UserPlus } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { user, login } = useAuth();
@@ -112,6 +112,16 @@ export const LoginPage: React.FC = () => {
           <Button type="submit" variant="primary" className="w-full py-2.5 mt-2 bg-red-600 hover:bg-red-700 focus:ring-red-600 text-white font-bold" isLoading={isLoading}>
             Sign In to Account
           </Button>
+
+          <div className="text-center pt-2">
+            <Link
+              to="/register"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-red-600 transition-colors"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>New Employee? Register Here</span>
+            </Link>
+          </div>
         </form>
 
         {/* Quick Demo Login Credentials Bar */}

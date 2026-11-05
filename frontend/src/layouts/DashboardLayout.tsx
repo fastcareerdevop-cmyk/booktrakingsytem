@@ -11,6 +11,7 @@ import {
   Users,
   FileBarChart2,
   ShieldAlert,
+  ShieldCheck,
   LogOut,
   Menu,
   X,
@@ -22,6 +23,7 @@ import {
   Barcode,
   Layers,
   PackageCheck,
+  Lock,
 } from 'lucide-react';
 
 export const DashboardLayout: React.FC = () => {
@@ -53,22 +55,32 @@ export const DashboardLayout: React.FC = () => {
     { label: 'Employees', path: '/admin/employees', icon: <Users className="w-5 h-5" /> },
     { label: 'Reports', path: '/admin/reports', icon: <FileBarChart2 className="w-5 h-5" /> },
     { label: 'Audit Logs', path: '/admin/audit-logs', icon: <ShieldAlert className="w-5 h-5" /> },
+    { label: 'RBAC (Role-Based Access Control)', path: '/admin/rbac', icon: <ShieldCheck className="w-5 h-5 text-red-400" /> },
   ];
 
-  const employeeNavItems = [
-    { label: 'Dashboard', path: '/employee/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    { label: 'Outgoing Sheet', path: '/employee/outgoing-orders', icon: <Truck className="w-5 h-5" /> },
-    { label: 'Outgoing Sheet 2', path: '/employee/outgoing-orders-2', icon: <Layers className="w-5 h-5" /> },
-    { label: 'Preparation (तैयारी)', path: '/employee/preparation', icon: <PackageCheck className="w-5 h-5" /> },
-    { label: 'Student Barcode Sheet', path: '/employee/barcode-sheet', icon: <ScanLine className="w-5 h-5" /> },
-    { label: 'Barcode Directory (बारकोड सूची)', path: '/employee/barcode-catalog', icon: <Barcode className="w-5 h-5" /> },
-    { label: 'Stock Inward', path: '/employee/invert', icon: <PackagePlus className="w-5 h-5" /> },
-    { label: 'Available Stock', path: '/employee/available-stock', icon: <Boxes className="w-5 h-5" /> },
-    { label: 'Pending Book Stock', path: '/employee/pending-stock', icon: <Clock className="w-5 h-5" /> },
-    { label: 'My Dispatch History', path: '/employee/my-history', icon: <Clock className="w-5 h-5" /> },
+  const allEmployeeNavItems = [
+    { id: 'dashboard', label: 'Dashboard', path: '/employee/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+    { id: 'dispatch_entry', label: 'Outgoing Sheet', path: '/employee/outgoing-orders', icon: <Truck className="w-5 h-5" /> },
+    { id: 'outgoing_orders_2', label: 'Outgoing Sheet 2', path: '/employee/outgoing-orders-2', icon: <Layers className="w-5 h-5" /> },
+    { id: 'preparation', label: 'Preparation (तैयारी)', path: '/employee/preparation', icon: <PackageCheck className="w-5 h-5" /> },
+    { id: 'barcode_sheet', label: 'Student Barcode Sheet', path: '/employee/barcode-sheet', icon: <ScanLine className="w-5 h-5" /> },
+    { id: 'barcode_catalog', label: 'Barcode Directory (बारकोड सूची)', path: '/employee/barcode-catalog', icon: <Barcode className="w-5 h-5" /> },
+    { id: 'stock_inward', label: 'Stock Inward', path: '/employee/invert', icon: <PackagePlus className="w-5 h-5" /> },
+    { id: 'available_stock', label: 'Available Stock', path: '/employee/available-stock', icon: <Boxes className="w-5 h-5" /> },
+    { id: 'pending_stock', label: 'Pending Book Stock', path: '/employee/pending-stock', icon: <Clock className="w-5 h-5" /> },
+    { id: 'dispatch_list', label: 'My Dispatch History', path: '/employee/my-history', icon: <Clock className="w-5 h-5" /> },
   ];
 
-  const navItems = isAdmin ? adminNavItems : employeeNavItems;
+  const isPending = !isAdmin && user?.accessStatus === 'PENDING';
+  const isRestricted = !isAdmin && user?.accessStatus === 'RESTRICTED';
+  const userPerms = user?.permissions || [];
+
+  // Filter employee navigation items based on assigned permissions
+  const filteredEmployeeNavItems = isPending || isRestricted
+    ? []
+    : allEmployeeNavItems.filter((item) => userPerms.includes(item.id));
+
+  const navItems = isAdmin ? adminNavItems : filteredEmployeeNavItems;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
@@ -123,10 +135,16 @@ export const DashboardLayout: React.FC = () => {
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span
                   className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                    isAdmin ? 'bg-red-500/25 text-red-300' : 'bg-emerald-500/25 text-emerald-300'
+                    isAdmin
+                      ? 'bg-red-500/25 text-red-300'
+                      : isPending
+                      ? 'bg-amber-500/25 text-amber-300'
+                      : isRestricted
+                      ? 'bg-rose-500/25 text-rose-300'
+                      : 'bg-emerald-500/25 text-emerald-300'
                   }`}
                 >
-                  {user?.role}
+                  {isAdmin ? 'ADMIN' : user?.accessStatus || user?.role}
                 </span>
                 <span className="text-[10px] text-slate-400 truncate">{user?.email}</span>
               </div>
@@ -135,24 +153,46 @@ export const DashboardLayout: React.FC = () => {
 
           {/* Navigation Links */}
           <nav className="px-3 py-1 space-y-0.5 overflow-y-auto max-h-[calc(100vh-230px)]">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
-              return (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    isActive
-                      ? 'bg-red-600 text-white shadow-xs font-semibold'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
-                  }`}
-                >
-                  <span className="w-4 h-4 shrink-0 flex items-center justify-center">{item.icon}</span>
-                  <span className="truncate">{item.label}</span>
-                </NavLink>
-              );
-            })}
+            {isPending ? (
+              <div className="p-3 bg-amber-950/40 border border-amber-800/60 rounded-xl text-center space-y-2 my-2">
+                <Clock className="w-5 h-5 text-amber-400 mx-auto animate-pulse" />
+                <p className="text-xs font-bold text-amber-300">Pending Approval</p>
+                <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                  Awaiting Administrator authorization and module assignment.
+                </p>
+              </div>
+            ) : isRestricted ? (
+              <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-center space-y-2 my-2">
+                <ShieldAlert className="w-5 h-5 text-rose-400 mx-auto" />
+                <p className="text-xs font-bold text-rose-300">Access Restricted</p>
+                <p className="text-[11px] text-rose-200/80 leading-relaxed">
+                  Account access is currently suspended. Please contact Administrator.
+                </p>
+              </div>
+            ) : navItems.length === 0 ? (
+              <div className="p-3 bg-slate-800/50 border border-slate-700 rounded-xl text-center my-2">
+                <p className="text-xs text-slate-400">No pages currently assigned.</p>
+              </div>
+            ) : (
+              navItems.map((item) => {
+                const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-red-600 text-white shadow-xs font-semibold'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
+                    }`}
+                  >
+                    <span className="w-4 h-4 shrink-0 flex items-center justify-center">{item.icon}</span>
+                    <span className="truncate">{item.label}</span>
+                  </NavLink>
+                );
+              })
+            )}
           </nav>
         </div>
 

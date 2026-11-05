@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import * as orderController from '../controllers/order.controller';
 import { authenticate, requireRole } from '../middleware/auth';
+import { requireActiveAccess } from '../middleware/rbac';
 const router = Router();
 
-router.use(authenticate);
+router.use(authenticate, requireActiveAccess());
 
 // Outgoing orders are accessible to both EMPLOYEE and ADMIN
 router.get('/outgoing', requireRole('ADMIN', 'EMPLOYEE'), orderController.getOutgoingOrders);

@@ -1,4 +1,5 @@
 export type Role = 'ADMIN' | 'EMPLOYEE';
+export type AccessStatus = 'PENDING' | 'ACTIVE' | 'RESTRICTED';
 
 export interface User {
   id: string;
@@ -6,7 +7,63 @@ export interface User {
   email: string;
   role: Role;
   isActive: boolean;
+  employeeId?: string;
+  mobileNumber?: string;
+  department?: string;
+  designation?: string;
+  accessStatus?: AccessStatus;
+  permissions?: string[];
   createdAt?: string;
+}
+
+export interface RbacPageItem {
+  id: string;
+  name: string;
+  category: 'Operations' | 'Stock & Inventory' | 'Barcodes & Tracking' | 'History & Records' | 'Administration';
+  description: string;
+  employeePath: string;
+  adminPath: string;
+  defaultForEmployee?: boolean;
+}
+
+export interface RbacEmployee {
+  id: string;
+  name: string;
+  employeeId: string;
+  email: string;
+  mobileNumber: string;
+  department: string;
+  designation: string;
+  role: Role;
+  isActive: boolean;
+  accessStatus: AccessStatus;
+  permissions: string[];
+  permissionsCount?: number;
+  createdAt: string;
+  updatedAt?: string;
+  _count?: {
+    dispatchLogs: number;
+    verificationAttempts: number;
+  };
+}
+
+export interface RbacAuditLogItem {
+  id: string;
+  targetUserId: string;
+  targetName: string;
+  targetEmail: string;
+  targetEmployeeId?: string;
+  actorUserId?: string;
+  actorName: string;
+  actorEmail?: string;
+  action: 'EMPLOYEE_REGISTERED' | 'PERMISSIONS_UPDATED' | 'STATUS_CHANGED' | 'EMPLOYEE_CREATED';
+  previousPermissions: string[];
+  newPermissions: string[];
+  previousStatus?: string;
+  newStatus?: string;
+  remarks?: string;
+  ipAddress?: string;
+  createdAt: string;
 }
 
 export type OrderStatus = 'PENDING' | 'PARTIALLY_DISPATCHED' | 'COMPLETED';

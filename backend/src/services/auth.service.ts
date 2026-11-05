@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { User } from '../models';
 import { ENV } from '../config/env';
 import { logAudit } from '../utils/audit';
+import { DISPATCH_SYSTEM_PAGES } from '../config/rbacPages';
 
 export async function loginUser(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
@@ -35,6 +36,11 @@ export async function loginUser(email: string, password: string) {
     metadata: { email: user.email, role: user.role },
   });
 
+  const accessStatus = user.role === 'ADMIN' ? 'ACTIVE' : (user.accessStatus || (user.isActive ? 'ACTIVE' : 'RESTRICTED'));
+  const permissions = user.role === 'ADMIN' 
+    ? DISPATCH_SYSTEM_PAGES.map((p) => p.id)
+    : (accessStatus === 'PENDING' ? [] : (user.permissions || []));
+
   return {
     token,
     user: {
@@ -43,16 +49,28 @@ export async function loginUser(email: string, password: string) {
       email: user.email,
       role: user.role,
       isActive: user.isActive,
+      employeeId: user.employeeId,
+      department: user.department,
+      designation: user.designation,
+      accessStatus,
+      permissions,
     },
   };
 }
 
 export async function getCurrentUser(userId: string) {
-  const user = await User.findById(userId).select('name email role isActive createdAt');
+  const user = await User.findById(userId).select(
+    'name email role isActive employeeId mobileNumber department designation accessStatus permissions createdAt'
+  );
 
   if (!user) {
     throw { statusCode: 404, message: 'User not found', code: 'USER_NOT_FOUND' };
   }
+
+  const accessStatus = user.role === 'ADMIN' ? 'ACTIVE' : (user.accessStatus || (user.isActive ? 'ACTIVE' : 'RESTRICTED'));
+  const permissions = user.role === 'ADMIN'
+    ? DISPATCH_SYSTEM_PAGES.map((p) => p.id)
+    : (accessStatus === 'PENDING' ? [] : (user.permissions || []));
 
   return {
     id: user._id.toString(),
@@ -60,6 +78,12 @@ export async function getCurrentUser(userId: string) {
     email: user.email,
     role: user.role,
     isActive: user.isActive,
+    employeeId: user.employeeId,
+    mobileNumber: user.mobileNumber,
+    department: user.department,
+    designation: user.designation,
+    accessStatus,
+    permissions,
     createdAt: user.createdAt,
   };
 }

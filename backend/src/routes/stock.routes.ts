@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import * as stockController from '../controllers/stock.controller';
 import { authenticate, requireRole } from '../middleware/auth';
+import { requireActiveAccess } from '../middleware/rbac';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -17,7 +18,7 @@ const upload = multer({
 
 const router = Router();
 
-router.use(authenticate);
+router.use(authenticate, requireActiveAccess());
 
 // Accessible by both ADMIN and EMPLOYEE
 router.get('/available', requireRole('ADMIN', 'EMPLOYEE'), stockController.getAvailableStock);

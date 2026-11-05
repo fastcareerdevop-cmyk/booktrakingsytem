@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import * as preparationController from '../controllers/preparation.controller';
 import { authenticate, requireRole } from '../middleware/auth';
+import { requireActiveAccess } from '../middleware/rbac';
 
 const router = Router();
 
-router.use(authenticate);
+router.use(authenticate, requireActiveAccess());
 
 // Accessible by both ADMIN and EMPLOYEE
 router.get('/products', requireRole('ADMIN', 'EMPLOYEE'), preparationController.getProducts);
