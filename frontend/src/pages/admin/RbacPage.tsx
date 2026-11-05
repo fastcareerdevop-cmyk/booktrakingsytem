@@ -79,7 +79,6 @@ export const RbacPage: React.FC = () => {
   const [newEmpData, setNewEmpData] = useState({
     name: '',
     email: '',
-    department: 'Dispatch & Outgoing',
     password: '',
   });
   const [isCreatingEmployee, setIsCreatingEmployee] = useState(false);
@@ -236,7 +235,6 @@ export const RbacPage: React.FC = () => {
     if (
       !newEmpData.name.trim() ||
       !newEmpData.email.trim() ||
-      !newEmpData.department.trim() ||
       !newEmpData.password
     ) {
       toastError('All fields are required.');
@@ -248,7 +246,6 @@ export const RbacPage: React.FC = () => {
       const res = await api.post('/rbac/register', {
         name: newEmpData.name.trim(),
         email: newEmpData.email.trim().toLowerCase(),
-        department: newEmpData.department.trim(),
         password: newEmpData.password,
       });
 
@@ -258,7 +255,6 @@ export const RbacPage: React.FC = () => {
         setNewEmpData({
           name: '',
           email: '',
-          department: 'Dispatch & Outgoing',
           password: '',
         });
         fetchEmployees();
@@ -1057,24 +1053,6 @@ export const RbacPage: React.FC = () => {
               required
               className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
             />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Department <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={newEmpData.department}
-              onChange={(e) => setNewEmpData({ ...newEmpData, department: e.target.value })}
-              required
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-            >
-              {DEPARTMENTS.filter((d) => d !== 'ALL').map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
           </div>
 
           <div>

@@ -7,7 +7,6 @@ import { Button } from '../components/common/Button';
 import {
   User,
   Mail,
-  Building2,
   Lock,
   Eye,
   EyeOff,
@@ -16,16 +15,6 @@ import {
   ShieldCheck,
   AlertCircle,
 } from 'lucide-react';
-
-const DEPARTMENTS = [
-  'Dispatch & Outgoing',
-  'Warehouse & Inventory',
-  'Order Packaging & Prep',
-  'Logistics & Tracking',
-  'Operations & Supply Chain',
-  'Quality Control',
-  'Administration & Support',
-];
 
 export const RegisterPage: React.FC = () => {
   const { user } = useAuth();
@@ -40,7 +29,6 @@ export const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    department: 'Dispatch & Outgoing',
     password: '',
   });
 
@@ -49,7 +37,7 @@ export const RegisterPage: React.FC = () => {
   const [isSuccess, setIsSuccess] = useState(false);
   const [registeredData, setRegisteredData] = useState<any>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -57,7 +45,7 @@ export const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.email.trim() || !formData.department.trim() || !formData.password) {
+    if (!formData.name.trim() || !formData.email.trim() || !formData.password) {
       toastError('Please fill in all required fields.');
       return;
     }
@@ -72,7 +60,6 @@ export const RegisterPage: React.FC = () => {
       const res = await api.post('/rbac/register', {
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
-        department: formData.department.trim(),
         password: formData.password,
       });
 
@@ -83,7 +70,9 @@ export const RegisterPage: React.FC = () => {
       }
     } catch (err: any) {
       const msg =
-        err.response?.data?.message || 'Registration failed. Please verify your details and try again.';
+        err.response?.data?.details?.[0]?.message ||
+        err.response?.data?.message ||
+        'Registration failed. Please verify your details and try again.';
       toastError(msg);
     } finally {
       setIsLoading(false);
@@ -115,7 +104,7 @@ export const RegisterPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-left mb-6 text-xs text-slate-700 space-y-1.5 font-mono">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-left mb-6 text-xs text-slate-700 space-y-2 font-mono">
             <div className="flex justify-between">
               <span className="text-slate-500 font-sans">Full Name:</span>
               <span className="font-bold">{registeredData?.name}</span>
@@ -123,10 +112,6 @@ export const RegisterPage: React.FC = () => {
             <div className="flex justify-between">
               <span className="text-slate-500 font-sans">Registered Email:</span>
               <span>{registeredData?.email}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500 font-sans">Department:</span>
-              <span>{registeredData?.department}</span>
             </div>
           </div>
 
@@ -204,29 +189,6 @@ export const RegisterPage: React.FC = () => {
                 className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
               />
               <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-            </div>
-          </div>
-
-          {/* Department */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Department <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <select
-                name="department"
-                value={formData.department}
-                onChange={handleChange}
-                required
-                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-              >
-                {DEPARTMENTS.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-              <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 

@@ -6,8 +6,8 @@ import { DISPATCH_SYSTEM_PAGES } from '../config/rbacPages';
 interface RegisterEmployeeInput {
   name: string;
   email: string;
-  department: string;
   password: string;
+  department?: string;
   employeeId?: string;
   mobileNumber?: string;
   designation?: string;
@@ -46,7 +46,7 @@ export async function registerEmployee(data: RegisterEmployeeInput, ipAddress?: 
     employeeId: normalizedEmployeeId,
     email: normalizedEmail,
     mobileNumber: data.mobileNumber?.trim() || '',
-    department: data.department.trim(),
+    department: data.department?.trim() || 'General Operations',
     designation: data.designation?.trim() || 'Staff Member',
     passwordHash,
     role: 'EMPLOYEE',

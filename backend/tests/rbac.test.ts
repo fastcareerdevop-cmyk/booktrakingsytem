@@ -81,14 +81,13 @@ describe('RBAC (Role-Based Access Control) Integration Tests', () => {
       expect(res.body.code).toBe('EMAIL_EXISTS');
     });
 
-    it('should successfully register an employee with only 4 fields (name, email, department, password)', async () => {
+    it('should successfully register an employee with only 3 fields (name, email, password)', async () => {
       const minimalEmail = `minimal.${Date.now()}@example.com`;
       const res = await request(app)
         .post('/api/rbac/register')
         .send({
           name: 'Priya Sharma',
           email: minimalEmail,
-          department: 'Warehouse & Inventory',
           password: 'Password@123',
         });
 
@@ -96,7 +95,6 @@ describe('RBAC (Role-Based Access Control) Integration Tests', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.name).toBe('Priya Sharma');
       expect(res.body.data.email).toBe(minimalEmail);
-      expect(res.body.data.department).toBe('Warehouse & Inventory');
       expect(res.body.data.employeeId).toBeDefined();
       expect(res.body.data.accessStatus).toBe('PENDING');
 
