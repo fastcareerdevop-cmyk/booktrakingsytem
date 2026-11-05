@@ -78,11 +78,8 @@ export const RbacPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newEmpData, setNewEmpData] = useState({
     name: '',
-    employeeId: '',
     email: '',
-    mobileNumber: '',
     department: 'Dispatch & Outgoing',
-    designation: '',
     password: '',
   });
   const [isCreatingEmployee, setIsCreatingEmployee] = useState(false);
@@ -237,12 +234,9 @@ export const RbacPage: React.FC = () => {
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
-      !newEmpData.name ||
-      !newEmpData.employeeId ||
-      !newEmpData.email ||
-      !newEmpData.mobileNumber ||
-      !newEmpData.department ||
-      !newEmpData.designation ||
+      !newEmpData.name.trim() ||
+      !newEmpData.email.trim() ||
+      !newEmpData.department.trim() ||
       !newEmpData.password
     ) {
       toastError('All fields are required.');
@@ -253,11 +247,8 @@ export const RbacPage: React.FC = () => {
     try {
       const res = await api.post('/rbac/register', {
         name: newEmpData.name.trim(),
-        employeeId: newEmpData.employeeId.trim().toUpperCase(),
         email: newEmpData.email.trim().toLowerCase(),
-        mobileNumber: newEmpData.mobileNumber.trim(),
         department: newEmpData.department.trim(),
-        designation: newEmpData.designation.trim(),
         password: newEmpData.password,
       });
 
@@ -266,11 +257,8 @@ export const RbacPage: React.FC = () => {
         setIsAddModalOpen(false);
         setNewEmpData({
           name: '',
-          employeeId: '',
           email: '',
-          mobileNumber: '',
           department: 'Dispatch & Outgoing',
-          designation: '',
           password: '',
         });
         fetchEmployees();
@@ -1040,103 +1028,53 @@ export const RbacPage: React.FC = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         title="Register New Employee (RBAC)"
-        maxWidth="2xl"
+        maxWidth="lg"
       >
         <form onSubmit={handleCreateEmployee} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={newEmpData.name}
-                onChange={(e) => setNewEmpData({ ...newEmpData, name: e.target.value })}
-                placeholder="Ramesh Kumar"
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Employee ID <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={newEmpData.employeeId}
-                onChange={(e) =>
-                  setNewEmpData({ ...newEmpData, employeeId: e.target.value.toUpperCase() })
-                }
-                placeholder="EMP-102"
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 uppercase focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Full Name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={newEmpData.name}
+              onChange={(e) => setNewEmpData({ ...newEmpData, name: e.target.value })}
+              placeholder="e.g. Divya Yadav"
+              required
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
+            />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Email Address <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                value={newEmpData.email}
-                onChange={(e) => setNewEmpData({ ...newEmpData, email: e.target.value })}
-                placeholder="ramesh@company.com"
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Mobile Number <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="tel"
-                value={newEmpData.mobileNumber}
-                onChange={(e) => setNewEmpData({ ...newEmpData, mobileNumber: e.target.value })}
-                placeholder="9876543210"
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Email Address <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="email"
+              value={newEmpData.email}
+              onChange={(e) => setNewEmpData({ ...newEmpData, email: e.target.value })}
+              placeholder="name@example.com"
+              required
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
+            />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Department <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={newEmpData.department}
-                onChange={(e) => setNewEmpData({ ...newEmpData, department: e.target.value })}
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-              >
-                {DEPARTMENTS.filter((d) => d !== 'ALL').map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Designation <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={newEmpData.designation}
-                onChange={(e) => setNewEmpData({ ...newEmpData, designation: e.target.value })}
-                placeholder="Dispatch Executive"
-                required
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Department <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={newEmpData.department}
+              onChange={(e) => setNewEmpData({ ...newEmpData, department: e.target.value })}
+              required
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
+            >
+              {DEPARTMENTS.filter((d) => d !== 'ALL').map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

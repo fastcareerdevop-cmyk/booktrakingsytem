@@ -5,17 +5,16 @@ import { DISPATCH_SYSTEM_PAGES } from '../config/rbacPages';
 
 interface RegisterEmployeeInput {
   name: string;
-  employeeId: string;
   email: string;
-  mobileNumber: string;
   department: string;
-  designation: string;
   password: string;
+  employeeId?: string;
+  mobileNumber?: string;
+  designation?: string;
 }
 
 export async function registerEmployee(data: RegisterEmployeeInput, ipAddress?: string) {
   const normalizedEmail = data.email.trim().toLowerCase();
-  const normalizedEmployeeId = data.employeeId.trim().toUpperCase();
 
   // Check if email already registered
   const existingByEmail = await User.findOne({ email: normalizedEmail });
@@ -23,10 +22,21 @@ export async function registerEmployee(data: RegisterEmployeeInput, ipAddress?: 
     throw { statusCode: 400, message: 'An account with this email address already exists.', code: 'EMAIL_EXISTS' };
   }
 
-  // Check if Employee ID already registered
-  const existingById = await User.findOne({ employeeId: normalizedEmployeeId });
-  if (existingById) {
-    throw { statusCode: 400, message: `Employee ID "${normalizedEmployeeId}" is already assigned to another user.`, code: 'EMPLOYEE_ID_EXISTS' };
+  // Determine Employee ID (use provided or auto-generate)
+  let normalizedEmployeeId = data.employeeId?.trim().toUpperCase() || '';
+  if (!normalizedEmployeeId) {
+    const count = await User.countDocuments({ role: 'EMPLOYEE' });
+    normalizedEmployeeId = `EMP-${(count + 101).toString()}`;
+    const duplicateCheck = await User.findOne({ employeeId: normalizedEmployeeId });
+    if (duplicateCheck) {
+      normalizedEmployeeId = `EMP-${Date.now().toString().slice(-5)}`;
+    }
+  } else {
+    // Check if provided Employee ID already registered
+    const existingById = await User.findOne({ employeeId: normalizedEmployeeId });
+    if (existingById) {
+      throw { statusCode: 400, message: `Employee ID "${normalizedEmployeeId}" is already assigned to another user.`, code: 'EMPLOYEE_ID_EXISTS' };
+    }
   }
 
   const passwordHash = await bcrypt.hash(data.password, 10);
@@ -35,9 +45,9 @@ export async function registerEmployee(data: RegisterEmployeeInput, ipAddress?: 
     name: data.name.trim(),
     employeeId: normalizedEmployeeId,
     email: normalizedEmail,
-    mobileNumber: data.mobileNumber.trim(),
+    mobileNumber: data.mobileNumber?.trim() || '',
     department: data.department.trim(),
-    designation: data.designation.trim(),
+    designation: data.designation?.trim() || 'Staff Member',
     passwordHash,
     role: 'EMPLOYEE',
     isActive: true,

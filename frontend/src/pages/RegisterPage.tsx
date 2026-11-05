@@ -6,11 +6,8 @@ import api from '../services/api';
 import { Button } from '../components/common/Button';
 import {
   User,
-  BadgeCheck,
   Mail,
-  Phone,
   Building2,
-  Briefcase,
   Lock,
   Eye,
   EyeOff,
@@ -42,13 +39,9 @@ export const RegisterPage: React.FC = () => {
 
   const [formData, setFormData] = useState({
     name: '',
-    employeeId: '',
     email: '',
-    mobileNumber: '',
     department: 'Dispatch & Outgoing',
-    designation: '',
     password: '',
-    confirmPassword: '',
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -64,15 +57,7 @@ export const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (
-      !formData.name ||
-      !formData.employeeId ||
-      !formData.email ||
-      !formData.mobileNumber ||
-      !formData.department ||
-      !formData.designation ||
-      !formData.password
-    ) {
+    if (!formData.name.trim() || !formData.email.trim() || !formData.department.trim() || !formData.password) {
       toastError('Please fill in all required fields.');
       return;
     }
@@ -82,20 +67,12 @@ export const RegisterPage: React.FC = () => {
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      toastError('Password and Confirm Password do not match.');
-      return;
-    }
-
     setIsLoading(true);
     try {
       const res = await api.post('/rbac/register', {
         name: formData.name.trim(),
-        employeeId: formData.employeeId.trim().toUpperCase(),
         email: formData.email.trim().toLowerCase(),
-        mobileNumber: formData.mobileNumber.trim(),
         department: formData.department.trim(),
-        designation: formData.designation.trim(),
         password: formData.password,
       });
 
@@ -116,7 +93,7 @@ export const RegisterPage: React.FC = () => {
   if (isSuccess) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
-        <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200/80 p-8 text-center relative overflow-hidden">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200/80 p-8 text-center relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-2 bg-emerald-500" />
 
           <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4">
@@ -140,8 +117,8 @@ export const RegisterPage: React.FC = () => {
 
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-left mb-6 text-xs text-slate-700 space-y-1.5 font-mono">
             <div className="flex justify-between">
-              <span className="text-slate-500 font-sans">Employee ID:</span>
-              <span className="font-bold">{registeredData?.employeeId}</span>
+              <span className="text-slate-500 font-sans">Full Name:</span>
+              <span className="font-bold">{registeredData?.name}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 font-sans">Registered Email:</span>
@@ -150,10 +127,6 @@ export const RegisterPage: React.FC = () => {
             <div className="flex justify-between">
               <span className="text-slate-500 font-sans">Department:</span>
               <span>{registeredData?.department}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-500 font-sans">Designation:</span>
-              <span>{registeredData?.designation}</span>
             </div>
           </div>
 
@@ -171,7 +144,7 @@ export const RegisterPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center py-8 px-4">
-      <div className="w-full max-w-xl bg-white rounded-2xl shadow-xl border border-slate-200/80 p-6 sm:p-8">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200/80 p-6 sm:p-8">
         {/* Header with FAST Logo */}
         <div className="text-center mb-6">
           <div className="bg-white border-2 border-red-500/80 rounded-2xl mx-auto inline-flex items-center justify-center shadow-md px-5 py-2.5 mb-3">
@@ -196,174 +169,90 @@ export const RegisterPage: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Full Name */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  placeholder="e.g. Ramesh Kumar"
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-                />
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              </div>
-            </div>
-
-            {/* Employee ID */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Employee ID <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  name="employeeId"
-                  value={formData.employeeId}
-                  onChange={handleChange}
-                  placeholder="e.g. EMP-101"
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 uppercase focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-                />
-                <BadgeCheck className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              </div>
+          {/* Full Name */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Full Name <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="e.g. Divya Yadav"
+                required
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
+              />
+              <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Email Address */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Email Address <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="employee@company.com"
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-                />
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              </div>
-            </div>
-
-            {/* Mobile Number */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Mobile Number <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="tel"
-                  name="mobileNumber"
-                  value={formData.mobileNumber}
-                  onChange={handleChange}
-                  placeholder="e.g. 9876543210"
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-                />
-                <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              </div>
+          {/* Email Address */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Email Address <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="name@example.com"
+                required
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
+              />
+              <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Department */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Department <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  name="department"
-                  value={formData.department}
-                  onChange={handleChange}
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-                >
-                  {DEPARTMENTS.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
-                </select>
-                <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              </div>
-            </div>
-
-            {/* Designation */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Designation <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  name="designation"
-                  value={formData.designation}
-                  onChange={handleChange}
-                  placeholder="e.g. Dispatch Assistant"
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-                />
-                <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              </div>
+          {/* Department */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Department <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <select
+                name="department"
+                value={formData.department}
+                onChange={handleChange}
+                required
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
+              >
+                {DEPARTMENTS.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+              <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Password */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Password <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Min. 6 characters"
-                  required
-                  className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-                />
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Confirm Password */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Confirm Password <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  placeholder="Re-enter password"
-                  required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
-                />
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-              </div>
+          {/* Password */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Password <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Min. 6 characters"
+                required
+                className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:bg-white"
+              />
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

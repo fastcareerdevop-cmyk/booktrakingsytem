@@ -81,22 +81,28 @@ describe('RBAC (Role-Based Access Control) Integration Tests', () => {
       expect(res.body.code).toBe('EMAIL_EXISTS');
     });
 
-    it('should reject duplicate Employee ID during registration', async () => {
+    it('should successfully register an employee with only 4 fields (name, email, department, password)', async () => {
+      const minimalEmail = `minimal.${Date.now()}@example.com`;
       const res = await request(app)
         .post('/api/rbac/register')
         .send({
-          name: 'Another User',
-          employeeId: testEmpCode,
-          email: `unique.${Date.now()}@example.com`,
-          mobileNumber: '9123456780',
+          name: 'Priya Sharma',
+          email: minimalEmail,
           department: 'Warehouse & Inventory',
-          designation: 'Supervisor',
           password: 'Password@123',
         });
 
-      expect(res.status).toBe(400);
-      expect(res.body.success).toBe(false);
-      expect(res.body.code).toBe('EMPLOYEE_ID_EXISTS');
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.name).toBe('Priya Sharma');
+      expect(res.body.data.email).toBe(minimalEmail);
+      expect(res.body.data.department).toBe('Warehouse & Inventory');
+      expect(res.body.data.employeeId).toBeDefined();
+      expect(res.body.data.accessStatus).toBe('PENDING');
+
+      // Cleanup
+      await User.findByIdAndDelete(res.body.data.id);
+      await RbacAuditLog.deleteMany({ targetUserId: res.body.data.id });
     });
 
     it('newly registered employee should have PENDING access and empty permissions on login', async () => {
