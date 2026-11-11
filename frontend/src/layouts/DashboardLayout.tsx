@@ -56,6 +56,7 @@ export const DashboardLayout: React.FC = () => {
     { label: 'Reports', path: '/admin/reports', icon: <FileBarChart2 className="w-5 h-5" /> },
     { label: 'Audit Logs', path: '/admin/audit-logs', icon: <ShieldAlert className="w-5 h-5" /> },
     { label: 'RBAC (Role-Based Access Control)', path: '/admin/rbac', icon: <ShieldCheck className="w-5 h-5 text-red-400" /> },
+    { label: 'Security', path: '/admin/security', icon: <Lock className="w-5 h-5 text-red-400" /> },
   ];
 
   const allEmployeeNavItems = [

@@ -11,6 +11,7 @@ import scannerSyncRoutes from './scannerSync.routes';
 import stockRoutes from './stock.routes';
 import preparationRoutes from './preparation.routes';
 import rbacRoutes from './rbac.routes';
+import securityRoutes from './security.routes';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/scanner-sync', scannerSyncRoutes);
 router.use('/stock', stockRoutes);
 router.use('/preparation', preparationRoutes);
 router.use('/rbac', rbacRoutes);
+router.use('/security', securityRoutes);
 
 export default router;

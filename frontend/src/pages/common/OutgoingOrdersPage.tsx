@@ -10,6 +10,8 @@ import { Pagination } from '../../components/common/Pagination';
 import { EmptyState } from '../../components/common/EmptyState';
 import { Button } from '../../components/common/Button';
 import { DateFilterSelect } from '../../components/common/DateFilterSelect';
+import { Modal } from '../../components/common/Modal';
+import { SecurityPinModal } from '../../components/common/SecurityPinModal';
 import { DispatchBoxModal } from '../../components/dispatch/DispatchBoxModal';
 import { StockDispatchHistoryModal } from '../../components/dispatch/StockDispatchHistoryModal';
 import {
@@ -40,6 +42,9 @@ import {
   Barcode,
   Phone,
   AlertTriangle,
+  Pencil,
+  Plus,
+  KeyRound,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { playSuccessChime, playErrorTone, playOrderCompleteFanfare, speakVoiceAnnouncement, speakVoiceTwice, speakErrorMessage } from '../../utils/sound';
@@ -149,6 +154,46 @@ export const OutgoingOrdersPage: React.FC = () => {
   const isScanningRef = useRef(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const autoCloseTimerRef = useRef<any>(null);
+
+  // ─── Admin Order Edit & Security PIN State ──────────────────────────────
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [editFormData, setEditFormData] = useState<{
+    studentName: string;
+    mobileNumber: string;
+    email: string;
+    trackingId: string;
+    productCode: string;
+    items: Array<{
+      _id?: string;
+      bookCode: string;
+      bookName: string;
+      requiredQuantity: number;
+      dispatchedQuantity?: number;
+    }>;
+  }>({
+    studentName: '',
+    mobileNumber: '',
+    email: '',
+    trackingId: '',
+    productCode: '',
+    items: [],
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Security PIN Modal State
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [pinPromptConfig, setPinPromptConfig] = useState<{
+    title: string;
+    description: string;
+    actionLabel: string;
+    onAuthorize: (pin: string) => Promise<void>;
+  }>({
+    title: 'Security Authorization Required',
+    description: 'Please enter the 4-digit Admin Security PIN.',
+    actionLabel: 'Authorize Action',
+    onAuthorize: async () => {},
+  });
 
   const fetchOrdersRef = useRef<any>(null);
 
@@ -593,13 +638,14 @@ export const OutgoingOrdersPage: React.FC = () => {
     };
   }, [stationSessionId, handleGlobalScan]);
 
-  const handleManualFinish = async () => {
+  const executeManualFinish = async (pin?: string) => {
     if (!lastScannedOrder?.id || isScanning) return;
     setIsScanning(true);
     try {
       const res = await api.post('/dispatch/verify', {
         action: 'MANUAL_FINISH_ORDER',
         orderId: lastScannedOrder.id,
+        pin,
       });
       if (res.data.success) {
         if (soundEnabled) playSuccessChime();
@@ -638,19 +684,34 @@ export const OutgoingOrdersPage: React.FC = () => {
         type: 'error',
         message: errMsg,
       });
+      throw err;
     } finally {
       setIsScanning(false);
       setTimeout(() => scanInputRef.current?.focus(), 50);
     }
   };
 
-  const handleQuickDispatchAll = async () => {
+  const handleManualFinish = () => {
+    if (!lastScannedOrder?.id || isScanning) return;
+    setPinPromptConfig({
+      title: 'Authorize Partial Dispatch',
+      description: `Enter the 4-digit Admin Security PIN to manually finish and dispatch this partial order for ${lastScannedOrder.studentName}.`,
+      actionLabel: 'Verify PIN & Dispatch',
+      onAuthorize: async (pin: string) => {
+        await executeManualFinish(pin);
+      },
+    });
+    setIsPinModalOpen(true);
+  };
+
+  const executeQuickDispatchAll = async (pin?: string) => {
     if (!lastScannedOrder?.id || isScanning) return;
     setIsScanning(true);
     try {
       const res = await api.post('/dispatch/verify', {
         action: 'QUICK_DISPATCH_ALL',
         orderId: lastScannedOrder.id,
+        pin,
       });
       if (res.data.success) {
         if (soundEnabled) playOrderCompleteFanfare();
@@ -660,9 +721,9 @@ export const OutgoingOrdersPage: React.FC = () => {
           setOrders(prev => prev.map(o => o.id === updatedOrder.id ? {
             ...o,
             totalDispatched: updatedOrder.totalDispatched,
-            totalPending: updatedOrder.totalPending,
-            status: updatedOrder.status,
-            items: updatedOrder.items || o.items,
+            totalPending: 0,
+            status: 'COMPLETED',
+            items: updatedOrder.items,
           } : o));
           setLastScannedOrder((prev: any) => prev ? {
             ...prev,
@@ -707,10 +768,24 @@ export const OutgoingOrdersPage: React.FC = () => {
         type: 'error',
         message: errMsg,
       });
+      throw err;
     } finally {
       setIsScanning(false);
       setTimeout(() => scanInputRef.current?.focus(), 50);
     }
+  };
+
+  const handleQuickDispatchAll = () => {
+    if (!lastScannedOrder?.id || isScanning) return;
+    setPinPromptConfig({
+      title: 'Authorize Quick Dispatch',
+      description: `Enter the 4-digit Admin Security PIN to quick-dispatch all remaining books for ${lastScannedOrder.studentName}.`,
+      actionLabel: 'Verify PIN & Dispatch All',
+      onAuthorize: async (pin: string) => {
+        await executeQuickDispatchAll(pin);
+      },
+    });
+    setIsPinModalOpen(true);
   };
 
   // Auto-trigger verification as soon as number/code is entered (no Enter click required)
@@ -902,6 +977,110 @@ export const OutgoingOrdersPage: React.FC = () => {
     } finally {
       setDeletingOrderId(null);
     }
+  };
+
+  // ─── Admin Edit Order Handlers ──────────────────────────────────────────
+  const handleOpenEditModal = (order: Order) => {
+    setEditingOrder(order);
+    setEditFormData({
+      studentName: order.studentName || '',
+      mobileNumber: order.mobileNumber || '',
+      email: order.email || '',
+      trackingId: order.trackingId || '',
+      productCode: order.productCode || '',
+      items: (order.items || []).map((it: any) => ({
+        _id: it.id || it._id,
+        bookCode: it.bookCode || '',
+        bookName: it.bookName || '',
+        requiredQuantity: it.requiredQuantity || 1,
+        dispatchedQuantity: it.dispatchedQuantity || 0,
+      })),
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditItemChange = (index: number, field: string, value: any) => {
+    setEditFormData((prev) => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const handleAddEditItem = () => {
+    setEditFormData((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { bookCode: '', bookName: '', requiredQuantity: 1, dispatchedQuantity: 0 },
+      ],
+    }));
+  };
+
+  const handleRemoveEditItem = (index: number) => {
+    if (editFormData.items.length <= 1) {
+      alert('An order must contain at least one book item.');
+      return;
+    }
+    setEditFormData((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, idx) => idx !== index),
+    }));
+  };
+
+  const handleRequestSaveEdit = () => {
+    if (!editFormData.studentName.trim()) {
+      alert('Student Name is required.');
+      return;
+    }
+    if (editFormData.items.length === 0) {
+      alert('Order must have at least one book item.');
+      return;
+    }
+    if (editFormData.items.some((it) => !it.bookCode.trim() || !it.bookName.trim())) {
+      alert('All books must have a Book Code and Book Title.');
+      return;
+    }
+
+    setPinPromptConfig({
+      title: 'Authorize Order Modification',
+      description: `Enter the 4-digit Admin Security PIN to confirm edits for ${editingOrder?.studentName} (${editingOrder?.trackingId || editingOrder?.orderCode || 'Order'}).`,
+      actionLabel: 'Verify PIN & Save Order',
+      onAuthorize: async (pin: string) => {
+        if (!editingOrder) return;
+        setIsSavingEdit(true);
+        try {
+          const res = await api.put(`/orders/${editingOrder.id}`, {
+            pin,
+            studentName: editFormData.studentName,
+            mobileNumber: editFormData.mobileNumber,
+            email: editFormData.email,
+            trackingId: editFormData.trackingId,
+            productCode: editFormData.productCode,
+            items: editFormData.items,
+          });
+
+          if (res.data.success) {
+            const updated = res.data.data;
+            setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o)));
+            if (lastScannedOrder && lastScannedOrder.id === updated.id) {
+              setLastScannedOrder((prev: any) => ({ ...prev, ...updated }));
+            }
+            if (selectedOrderForDispatch && selectedOrderForDispatch.id === updated.id) {
+              setSelectedOrderForDispatch(updated);
+            }
+            setIsEditModalOpen(false);
+            setEditingOrder(null);
+            alert('Order updated successfully with PIN authorization.');
+          }
+        } catch (err: any) {
+          throw err;
+        } finally {
+          setIsSavingEdit(false);
+        }
+      },
+    });
+    setIsPinModalOpen(true);
   };
 
   const pendingOrdersList = orders.filter((o) => o.totalPending > 0);
@@ -1939,16 +2118,27 @@ export const OutgoingOrdersPage: React.FC = () => {
                               </button>
                             </Link>
                             {isAdmin && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteOrder(order)}
-                                disabled={deletingOrderId === order.id}
-                                className="p-1.5 text-rose-600 hover:text-white hover:bg-rose-600 rounded-lg border border-rose-200 transition-colors disabled:opacity-50"
-                                title="Delete this order"
-                                aria-label={`Delete order for ${order.studentName}`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditModal(order)}
+                                  className="p-1.5 text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 transition-colors"
+                                  title="Edit this order (PIN protected)"
+                                  aria-label={`Edit order for ${order.studentName}`}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOrder(order)}
+                                  disabled={deletingOrderId === order.id}
+                                  className="p-1.5 text-rose-600 hover:text-white hover:bg-rose-600 rounded-lg border border-rose-200 transition-colors disabled:opacity-50"
+                                  title="Delete this order"
+                                  aria-label={`Delete order for ${order.studentName}`}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -2053,6 +2243,205 @@ export const OutgoingOrdersPage: React.FC = () => {
       <StockDispatchHistoryModal
         isOpen={showStockHistory}
         onClose={() => setShowStockHistory(false)}
+      />
+
+      {/* ─── Admin Edit Order Modal (PIN Protected) ─── */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          if (!isSavingEdit) {
+            setIsEditModalOpen(false);
+            setEditingOrder(null);
+          }
+        }}
+        title="Edit Order Details"
+        subtitle={editingOrder ? `Order Code: ${editingOrder.orderCode || editingOrder.id} • Requires 4-digit Security PIN to save` : ''}
+        maxWidth="4xl"
+      >
+        {editingOrder && (
+          <div className="space-y-5 p-1">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5 text-xs text-amber-800">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Security PIN Protected:</span> Any edits to student info, courier tracking ID, or book quantities require entering your 4-digit Security PIN and will be recorded in the Audit Log.
+              </div>
+            </div>
+
+            {/* Basic Student & Order Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Student Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.studentName}
+                  onChange={(e) => setEditFormData({ ...editFormData, studentName: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. Rahul Sharma"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Mobile Number
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.mobileNumber}
+                  onChange={(e) => setEditFormData({ ...editFormData, mobileNumber: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. 9876543210"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. student@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Courier Tracking ID (AWB)
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.trackingId}
+                  onChange={(e) => setEditFormData({ ...editFormData, trackingId: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 text-sm font-mono uppercase border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. TRACK12345"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Product Code (Combo / Course)
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.productCode}
+                  onChange={(e) => setEditFormData({ ...editFormData, productCode: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 text-sm font-mono uppercase border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. PROD-CA-FINAL"
+                />
+              </div>
+            </div>
+
+            {/* Book Items Section */}
+            <div className="border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-red-600" />
+                  <span>Order Books / Items ({editFormData.items.length})</span>
+                </h4>
+                <button
+                  type="button"
+                  onClick={handleAddEditItem}
+                  className="px-2.5 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg flex items-center gap-1 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Book</span>
+                </button>
+              </div>
+
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {editFormData.items.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center gap-3"
+                  >
+                    <div className="w-36">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Book Code</label>
+                      <input
+                        type="text"
+                        value={item.bookCode}
+                        onChange={(e) => handleEditItemChange(idx, 'bookCode', e.target.value.toUpperCase())}
+                        placeholder="e.g. BK-01"
+                        className="w-full px-2 py-1 text-xs font-mono font-bold uppercase border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+
+                    <div className="flex-1 min-w-[180px]">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Book Title / Name</label>
+                      <input
+                        type="text"
+                        value={item.bookName}
+                        onChange={(e) => handleEditItemChange(idx, 'bookName', e.target.value)}
+                        placeholder="e.g. Advanced Auditing Vol 1"
+                        className="w-full px-2 py-1 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+
+                    <div className="w-24">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Req Qty</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.requiredQuantity}
+                        onChange={(e) => handleEditItemChange(idx, 'requiredQuantity', Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-2 py-1 text-xs font-semibold text-center border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
+                      />
+                    </div>
+
+                    <div className="pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEditItem(idx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        title="Remove this book"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="border-t border-slate-200 pt-4 flex items-center justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingOrder(null);
+                }}
+                disabled={isSavingEdit}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleRequestSaveEdit}
+                disabled={isSavingEdit}
+                icon={<KeyRound className="w-4 h-4" />}
+              >
+                {isSavingEdit ? 'Saving...' : 'Authorize & Save Changes'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ─── Security PIN Verification Modal ─── */}
+      <SecurityPinModal
+        isOpen={isPinModalOpen}
+        onClose={() => setIsPinModalOpen(false)}
+        title={pinPromptConfig.title}
+        description={pinPromptConfig.description}
+        actionLabel={pinPromptConfig.actionLabel}
+        onSuccess={pinPromptConfig.onAuthorize}
       />
     </div>
   );

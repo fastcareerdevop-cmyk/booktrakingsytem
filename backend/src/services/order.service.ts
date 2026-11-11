@@ -4,6 +4,7 @@ import { logAudit } from '../utils/audit';
 import { parseDateFilter } from '../utils/date';
 import { sendOrderEmail } from './email.service';
 import { sendOrderWhatsAppMessage } from './whatsapp.service';
+import { verifySecurityPin } from './security.service';
 
 export type ItemStatus = 'PENDING' | 'PARTIALLY_DISPATCHED' | 'COMPLETED';
 export type OrderStatus = 'PENDING' | 'PARTIALLY_DISPATCHED' | 'COMPLETED';
@@ -635,4 +636,86 @@ export async function deleteOrders(userId: string, orderIds: string[]) {
     logsRemoved: deletedLogs.deletedCount,
     attemptsRemoved: deletedAttempts.deletedCount,
   };
+}
+
+export interface AdminUpdateOrderInput {
+  pin: string;
+  studentName?: string;
+  mobileNumber?: string;
+  email?: string;
+  trackingId?: string;
+  productCode?: string;
+  items?: {
+    _id?: string;
+    productCode?: string;
+    productName?: string;
+    bookCode: string;
+    bookName: string;
+    requiredQuantity: number;
+    dispatchedQuantity?: number;
+  }[];
+}
+
+export async function adminUpdateOrder(
+  orderId: string,
+  data: AdminUpdateOrderInput,
+  adminUser: { id: string; name: string }
+) {
+  // 1. Verify 4-digit Security PIN first
+  await verifySecurityPin(data.pin);
+
+  const order = await Order.findById(orderId);
+  if (!order) {
+    throw { statusCode: 404, message: 'Order not found', code: 'ORDER_NOT_FOUND' };
+  }
+
+  const previousSnapshot = {
+    studentName: order.studentName,
+    mobileNumber: order.mobileNumber,
+    email: order.email,
+    trackingId: order.trackingId,
+    productCode: order.productCode,
+    itemsCount: order.items.length,
+  };
+
+  if (data.studentName !== undefined) order.studentName = data.studentName.trim();
+  if (data.mobileNumber !== undefined) order.mobileNumber = data.mobileNumber.trim();
+  if (data.email !== undefined) order.email = data.email ? data.email.trim().toLowerCase() : null;
+  if (data.trackingId !== undefined) order.trackingId = data.trackingId.trim().toUpperCase();
+  if (data.productCode !== undefined) order.productCode = data.productCode.trim().toUpperCase();
+
+  if (Array.isArray(data.items) && data.items.length > 0) {
+    order.items = data.items.map((it) => ({
+      _id: it._id ? new mongoose.Types.ObjectId(it._id) : new mongoose.Types.ObjectId(),
+      productCode: (it.productCode || order.productCode || '').trim().toUpperCase(),
+      productName: it.productName || 'Default Product',
+      bookCode: it.bookCode.trim().toUpperCase(),
+      bookName: it.bookName.trim(),
+      requiredQuantity: Math.max(1, Number(it.requiredQuantity) || 1),
+      dispatchedQuantity: Math.max(0, Number(it.dispatchedQuantity) || 0),
+    }));
+  }
+
+  await order.save();
+
+  await logAudit({
+    actorUserId: adminUser.id,
+    action: 'ORDER_EDITED_BY_ADMIN',
+    entityType: 'Order',
+    entityId: order._id.toString(),
+    metadata: {
+      adminName: adminUser.name,
+      previous: previousSnapshot,
+      updated: {
+        studentName: order.studentName,
+        mobileNumber: order.mobileNumber,
+        email: order.email,
+        trackingId: order.trackingId,
+        productCode: order.productCode,
+        itemsCount: order.items.length,
+      },
+    },
+  });
+
+  return getOrderById(order._id.toString());
 }

@@ -23,6 +23,7 @@ router.post('/:id/retry-whatsapp', requireRole('ADMIN', 'EMPLOYEE'), orderContro
 // Order details and items accessible to both
 router.get('/:id', requireRole('ADMIN', 'EMPLOYEE'), orderController.getOrderById);
 router.get('/:id/items', requireRole('ADMIN', 'EMPLOYEE'), orderController.getOrderItems);
+router.put('/:id', requireRole('ADMIN'), orderController.adminUpdateOrder);
 
 // All orders list is accessible to ADMIN
 router.get('/', requireRole('ADMIN'), orderController.getOrders);

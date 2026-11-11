@@ -9,6 +9,7 @@ import * as orderService from '../services/order.service';
 import { computeOrderStatus, computeItemStatus } from '../services/order.service';
 import { normalizeBookCode } from '../utils/normalize';
 import { logAudit } from '../utils/audit';
+import * as securityService from '../services/security.service';
 
 async function notifyOrderWhenFullyDispatched(orderId: string, actorUserId: string, totalPending: number) {
   if (!orderId || totalPending > 0) {
@@ -24,12 +25,31 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
       return errorResponse(res, 'Unauthorized', 'UNAUTHORIZED', 401);
     }
 
-    const { orderItemId, orderId, enteredBookCode, enteredCode, requestId, action } = req.body;
+    const { orderItemId, orderId, enteredBookCode, enteredCode, requestId, action, pin, isManual } = req.body;
     const scannedCode = (enteredCode || enteredBookCode || '').trim().toUpperCase();
 
+    let targetOrderId = orderId;
+    if (!targetOrderId && orderItemId) {
+      const parentOrder = await Order.findOne({ 'items._id': orderItemId });
+      if (parentOrder) {
+        targetOrderId = parentOrder._id.toString();
+      }
+    }
+
+    // Verify 4-digit Security PIN for manual actions if PIN is configured
+    if ((action === 'MANUAL_FINISH_ORDER' || action === 'QUICK_DISPATCH_ALL' || isManual) && targetOrderId) {
+      const pinStatus = await securityService.getPinStatus();
+      if (pinStatus.isConfigured) {
+        if (!pin) {
+          return errorResponse(res, '4-digit Security PIN is required for manual order dispatch.', 'PIN_REQUIRED', 400);
+        }
+        await securityService.verifySecurityPin(pin);
+      }
+    }
+
     // 0. Manual action: Finish partial order or quick dispatch all
-    if (action === 'MANUAL_FINISH_ORDER' && orderId) {
-      const order = await Order.findById(orderId);
+    if (action === 'MANUAL_FINISH_ORDER' && targetOrderId) {
+      const order = await Order.findById(targetOrderId);
       if (!order) {
         return errorResponse(res, 'Order not found', 'ORDER_NOT_FOUND', 404);
       }
@@ -73,8 +93,8 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
       });
     }
 
-    if (action === 'QUICK_DISPATCH_ALL' && orderId) {
-      const order = await Order.findById(orderId);
+    if (action === 'QUICK_DISPATCH_ALL' && targetOrderId) {
+      const order = await Order.findById(targetOrderId);
       if (!order) {
         return errorResponse(res, 'Order not found', 'ORDER_NOT_FOUND', 404);
       }
@@ -97,13 +117,13 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
     }
 
     // 0B. Compulsory Tracking ID Match: Deduct stock and fulfill order ONLY when Tracking ID matches!
-    if (action === 'CONFIRM_DISPATCH_WITH_TRACKING' && orderId) {
+    if (action === 'CONFIRM_DISPATCH_WITH_TRACKING' && targetOrderId) {
       const trackingCode = (req.body.trackingCode || enteredCode || '').trim().toUpperCase();
       if (!trackingCode) {
         return errorResponse(res, 'Tracking ID scan karna anivarya hai.', 'TRACKING_ID_REQUIRED', 400);
       }
 
-      const order = await Order.findById(orderId);
+      const order = await Order.findById(targetOrderId);
       if (!order) {
         return errorResponse(res, 'Order not found', 'ORDER_NOT_FOUND', 404);
       }
@@ -250,7 +270,7 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
     }
 
     // Check if there is an active order loaded on screen and whether scannedCode belongs to it as a book or product
-    const activeOrderForContext = orderId ? await Order.findById(orderId) : null;
+    const activeOrderForContext = targetOrderId ? await Order.findById(targetOrderId) : null;
     const isBookOrProductOfActiveOrder = activeOrderForContext ? (
       (activeOrderForContext.productCode && activeOrderForContext.productCode.toUpperCase() === scannedCode) ||
       activeOrderForContext.items.some((i: any) => 
@@ -320,8 +340,8 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
     }
 
     // 2. Active Order Context (Order is currently loaded on screen)
-    if (orderId) {
-      const activeOrder = activeOrderForContext || await Order.findById(orderId);
+    if (targetOrderId) {
+      const activeOrder = activeOrderForContext || await Order.findById(targetOrderId);
       if (activeOrder) {
         const orderRemaining = activeOrder.items.reduce(
           (acc: number, i: any) => acc + Math.max(0, i.requiredQuantity - i.dispatchedQuantity),

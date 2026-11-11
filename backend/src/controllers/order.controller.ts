@@ -149,3 +149,27 @@ export async function deleteOrders(req: AuthenticatedRequest, res: Response, nex
     next(error);
   }
 }
+
+export async function adminUpdateOrder(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    if (!req.user || req.user.role !== 'ADMIN') {
+      return errorResponse(res, 'Only administrators can edit order details', 'UNAUTHORIZED', 403);
+    }
+    const { id } = req.params;
+    const { pin, studentName, mobileNumber, email, trackingId, productCode, items } = req.body;
+
+    if (!pin) {
+      return errorResponse(res, '4-digit Security PIN is required to update order', 'PIN_REQUIRED', 400);
+    }
+
+    const updated = await orderService.adminUpdateOrder(
+      id,
+      { pin, studentName, mobileNumber, email, trackingId, productCode, items },
+      { id: req.user.id, name: req.user.name }
+    );
+
+    return successResponse(res, 'Order details updated successfully with PIN authorization.', updated);
+  } catch (error) {
+    next(error);
+  }
+}

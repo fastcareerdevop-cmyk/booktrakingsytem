@@ -17,6 +17,7 @@ import { EmployeesPage } from './pages/admin/EmployeesPage';
 import { ReportsPage } from './pages/admin/ReportsPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
 import { RbacPage } from './pages/admin/RbacPage';
+import { SecurityPage } from './pages/admin/SecurityPage';
 import { BarcodeSheetPage } from './pages/BarcodeSheetPage';
 import { BarcodeCatalogPage } from './pages/BarcodeCatalogPage';
 import { InvertStockPage } from './pages/stock/InvertStockPage';
@@ -160,6 +161,7 @@ export const App: React.FC = () => {
               <Route path="reports" element={<ReportsPage />} />
               <Route path="audit-logs" element={<AuditLogsPage />} />
               <Route path="rbac" element={<RbacPage />} />
+              <Route path="security" element={<SecurityPage />} />
             </Route>
 
             {/* Employee Routes with RBAC Page Guards */}

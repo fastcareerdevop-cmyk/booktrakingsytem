@@ -10,3 +10,4 @@ export * from './PendingBook';
 export * from './ProductCatalog';
 export * from './PackagePreparation';
 export * from './RbacAuditLog';
+export * from './SecuritySetting';
