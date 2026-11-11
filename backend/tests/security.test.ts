@@ -291,4 +291,108 @@ describe('Admin Security PIN & Order Edit Integration Tests', () => {
       expect(res.body.success).toBe(true);
     });
   });
+
+  describe('4. Tracking ID Verification & Matching (/api/dispatch/verify)', () => {
+    let trackingOrder: any;
+
+    beforeAll(async () => {
+      trackingOrder = await Order.create({
+        importBatchId: testBatch._id,
+        orderCode: 'ORD-TRACK-001',
+        studentName: 'Aarav Mehta',
+        mobileNumber: '9123456780',
+        email: 'aarav@example.com',
+        trackingId: 'DTDC-12345678',
+        productCode: 'PROD-CA-FOUNDATION',
+        items: [
+          {
+            bookCode: 'AARAV-BK-01',
+            bookName: 'Accounting Vol 1',
+            requiredQuantity: 1,
+            dispatchedQuantity: 1, // Already verified on table!
+            pendingQuantity: 0,
+            status: 'COMPLETED',
+          },
+        ],
+      });
+    });
+
+    afterAll(async () => {
+      if (trackingOrder) await Order.findByIdAndDelete(trackingOrder._id);
+    });
+
+    it('should match exact tracking ID even if order items are already completed', async () => {
+      const res = await request(app)
+        .post('/api/dispatch/verify')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          action: 'CONFIRM_DISPATCH_WITH_TRACKING',
+          orderId: trackingOrder._id.toString(),
+          trackingCode: 'DTDC-12345678',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.scanType).toBe('TRACKING_MATCHED_AND_DISPATCHED');
+    });
+
+    it('should match tracking ID ignoring hyphens, spaces, and case', async () => {
+      const res = await request(app)
+        .post('/api/dispatch/verify')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          action: 'CONFIRM_DISPATCH_WITH_TRACKING',
+          orderId: trackingOrder._id.toString(),
+          trackingCode: '  dtdc 12345678  ',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.scanType).toBe('TRACKING_MATCHED_AND_DISPATCHED');
+    });
+
+    it('should match tracking ID with courier barcode prefix (e.g. ]C1 or AWB:)', async () => {
+      const res = await request(app)
+        .post('/api/dispatch/verify')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          action: 'CONFIRM_DISPATCH_WITH_TRACKING',
+          orderId: trackingOrder._id.toString(),
+          trackingCode: ']C1DTDC12345678',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.scanType).toBe('TRACKING_MATCHED_AND_DISPATCHED');
+    });
+
+    it('should resolve order automatically from database even if orderId was not provided', async () => {
+      const res = await request(app)
+        .post('/api/dispatch/verify')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          action: 'CONFIRM_DISPATCH_WITH_TRACKING',
+          // orderId omitted on purpose!
+          trackingCode: 'DTDC12345678',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.order.id).toBe(trackingOrder._id.toString());
+    });
+
+    it('should reject completely unrelated tracking ID', async () => {
+      const res = await request(app)
+        .post('/api/dispatch/verify')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          action: 'CONFIRM_DISPATCH_WITH_TRACKING',
+          orderId: trackingOrder._id.toString(),
+          trackingCode: 'COMPLETELY_WRONG_AWB_99999',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('TRACKING_ID_MISMATCH');
+    });
+  });
 });

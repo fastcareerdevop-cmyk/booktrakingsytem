@@ -11,6 +11,61 @@ import { normalizeBookCode } from '../utils/normalize';
 import { logAudit } from '../utils/audit';
 import * as securityService from '../services/security.service';
 
+function cleanTrackingString(val: string): string {
+  if (!val) return '';
+  return val.trim().toUpperCase().replace(/[^A-Z0-9]/gi, '');
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildFlexibleTrackingRegex(code: string): RegExp {
+  const clean = cleanTrackingString(code);
+  if (!clean) return new RegExp('^$');
+  const pattern = clean.split('').map(c => escapeRegex(c)).join('[\\s\\-_]*');
+  return new RegExp(`^${pattern}$`, 'i');
+}
+
+function isTrackingMatch(input: string, trackingId?: string | null, orderCode?: string | null): boolean {
+  if (!input) return false;
+  const rawInput = input.trim().toUpperCase();
+  const rawTrack = (trackingId || '').trim().toUpperCase();
+  const rawOrder = (orderCode || '').trim().toUpperCase();
+
+  // 1. Direct exact or substring match
+  if (rawTrack && (rawInput === rawTrack || rawTrack.includes(rawInput) || rawInput.includes(rawTrack))) {
+    return true;
+  }
+  if (rawOrder && (rawInput === rawOrder || rawOrder.includes(rawInput) || rawInput.includes(rawOrder))) {
+    return true;
+  }
+
+  // 2. Alphanumeric match (ignoring spaces, dashes, hyphens, slashes, colons, hashes, dots, etc.)
+  const cleanInput = cleanTrackingString(input);
+  const cleanTrack = cleanTrackingString(trackingId || '');
+  const cleanOrder = cleanTrackingString(orderCode || '');
+
+  if (cleanTrack && cleanInput === cleanTrack) return true;
+  if (cleanOrder && cleanInput === cleanOrder) return true;
+
+  // 3. Substring match for tracking IDs of meaningful length (>= 5)
+  if (cleanTrack && cleanTrack.length >= 5) {
+    if (cleanInput.includes(cleanTrack) || cleanTrack.includes(cleanInput)) return true;
+  }
+  if (cleanOrder && cleanOrder.length >= 5) {
+    if (cleanInput.includes(cleanOrder) || cleanOrder.includes(cleanInput)) return true;
+  }
+
+  // 4. Strip common barcode/courier prefixes like ]C1, ]e0, AWB, TRK, DTDC, DEL
+  const strippedInput = cleanInput.replace(/^(?:AWB|TRK|TRACK|DTDC|DEL|C1|E0|Q1|D1)+/gi, '');
+  if (strippedInput && cleanTrack && (strippedInput === cleanTrack || cleanTrack.includes(strippedInput) || strippedInput.includes(cleanTrack))) {
+    return true;
+  }
+
+  return false;
+}
+
 async function notifyOrderWhenFullyDispatched(orderId: string, actorUserId: string, totalPending: number) {
   if (!orderId || totalPending > 0) {
     return null;
@@ -117,38 +172,49 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
     }
 
     // 0B. Compulsory Tracking ID Match: Deduct stock and fulfill order ONLY when Tracking ID matches!
-    if (action === 'CONFIRM_DISPATCH_WITH_TRACKING' && targetOrderId) {
+    if (action === 'CONFIRM_DISPATCH_WITH_TRACKING') {
       const trackingCode = (req.body.trackingCode || enteredCode || '').trim().toUpperCase();
       if (!trackingCode) {
         return errorResponse(res, 'Tracking ID scan karna anivarya hai.', 'TRACKING_ID_REQUIRED', 400);
       }
 
-      const order = await Order.findById(targetOrderId);
-      if (!order) {
-        return errorResponse(res, 'Order not found', 'ORDER_NOT_FOUND', 404);
-      }
+      // 1. Try finding by targetOrderId if provided
+      let order = targetOrderId ? await Order.findById(targetOrderId) : null;
+      let isMatch = order ? isTrackingMatch(trackingCode, order.trackingId, order.orderCode) : false;
 
-      if (computeOrderStatus(order.items) === 'COMPLETED') {
-        return errorResponse(
-          res,
-          `❌ Order "${order.trackingId || order.orderCode}" (${order.studentName}) pehle se hi fully dispatch ho chuka hai!`,
-          'ORDER_ALREADY_COMPLETED',
-          400
-        );
-      }
-
-      // Check tracking code match against expected Tracking ID or Order Code
-      const cleanScanned = trackingCode.replace(/[\s\-_]/g, '').toUpperCase();
-      const cleanExpectedTracking = (order.trackingId || '').replace(/[\s\-_]/g, '').toUpperCase();
-      const cleanExpectedOrder = (order.orderCode || '').replace(/[\s\-_]/g, '').toUpperCase();
-
-      const isMatch = (cleanExpectedTracking && cleanScanned === cleanExpectedTracking) ||
-                      (cleanExpectedOrder && cleanScanned === cleanExpectedOrder);
-
+      // 2. If targetOrderId was not provided, not found, or did not match the scanned code,
+      // search for candidate orders in DB that match this trackingCode or orderCode!
       if (!isMatch) {
+        const cleanInput = cleanTrackingString(trackingCode);
+        const flexRegex = buildFlexibleTrackingRegex(trackingCode);
+        const candidateOrders = await Order.find({
+          $or: [
+            { trackingId: trackingCode },
+            { orderCode: trackingCode },
+            { trackingId: flexRegex },
+            { orderCode: flexRegex },
+            { trackingId: new RegExp(`^${escapeRegex(trackingCode)}$`, 'i') },
+            { orderCode: new RegExp(`^${escapeRegex(trackingCode)}$`, 'i') },
+            ...(cleanInput.length >= 4 ? [
+              { trackingId: new RegExp(escapeRegex(cleanInput), 'i') },
+              { orderCode: new RegExp(escapeRegex(cleanInput), 'i') },
+            ] : []),
+          ],
+        }).limit(20);
+
+        for (const cand of candidateOrders) {
+          if (isTrackingMatch(trackingCode, cand.trackingId, cand.orderCode)) {
+            order = cand;
+            isMatch = true;
+            break;
+          }
+        }
+      }
+
+      if (!order || !isMatch) {
         return errorResponse(
           res,
-          `❌ Galat Tracking ID "${trackingCode}"! Sahi Tracking ID: "${order.trackingId || order.orderCode}"`,
+          `❌ Galat Tracking ID "${trackingCode}"! Sahi Tracking ID: "${order?.trackingId || order?.orderCode || 'N/A'}"`,
           'TRACKING_ID_MISMATCH',
           400
         );

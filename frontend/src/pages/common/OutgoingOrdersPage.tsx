@@ -533,12 +533,16 @@ export const OutgoingOrdersPage: React.FC = () => {
         // 🌟 Step 3: Trigger Compulsory Tracking ID Verification ONLY when ALL items/products are verified
         const orderFullyVerified = (isComplete || (data.allBooksVerified && updatedOrder?.totalPending === 0)) && !isLoadedOnly;
         if (orderFullyVerified) {
-          setShowPaytmSuccess(true);
-          showPaytmSuccessRef.current = true;
-          setCompletedOrderId(updatedOrder?.id || activeOrderId || '');
+          const matchedOid = updatedOrder?.id || activeOrderId || '';
+          completedOrderIdRef.current = matchedOid;
+          completedTrackingIdRef.current = updatedOrder?.trackingId || '';
+          completedOrderCodeRef.current = updatedOrder?.orderCode || '';
+          setCompletedOrderId(matchedOid);
           setCompletedStudentName(updatedOrder?.studentName || '');
           setCompletedTrackingId(updatedOrder?.trackingId || '');
           setCompletedOrderCode(updatedOrder?.orderCode || '');
+          setShowPaytmSuccess(true);
+          showPaytmSuccessRef.current = true;
           setTrackingInput('');
           setTrackingMatchStatus('idle');
           setTrackingErrorMessage('');
@@ -741,11 +745,16 @@ export const OutgoingOrdersPage: React.FC = () => {
           trackingId: updatedOrder?.trackingId,
         });
 
-        setShowPaytmSuccess(true);
-        showPaytmSuccessRef.current = true;
+        const quickOid = updatedOrder?.id || lastScannedOrder?.id || '';
+        completedOrderIdRef.current = quickOid;
+        completedTrackingIdRef.current = updatedOrder?.trackingId || '';
+        completedOrderCodeRef.current = updatedOrder?.orderCode || '';
+        setCompletedOrderId(quickOid);
         setCompletedStudentName(updatedOrder?.studentName || '');
         setCompletedTrackingId(updatedOrder?.trackingId || '');
         setCompletedOrderCode(updatedOrder?.orderCode || '');
+        setShowPaytmSuccess(true);
+        showPaytmSuccessRef.current = true;
         setTrackingInput('');
         setTrackingMatchStatus('idle');
         setTrackingErrorMessage('');
@@ -912,6 +921,13 @@ export const OutgoingOrdersPage: React.FC = () => {
   const handleOpenDispatchBox = (order: Order) => {
     lastScannedOrderRef.current = order;
     setLastScannedOrder(order);
+    completedOrderIdRef.current = order.id;
+    completedTrackingIdRef.current = order.trackingId || '';
+    completedOrderCodeRef.current = order.orderCode || '';
+    setCompletedOrderId(order.id);
+    setCompletedStudentName(order.studentName);
+    setCompletedTrackingId(order.trackingId);
+    setCompletedOrderCode(order.orderCode || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => {
       innerInputRef.current?.focus() || scanInputRef.current?.focus();
