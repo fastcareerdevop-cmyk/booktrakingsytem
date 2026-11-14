@@ -2359,14 +2359,31 @@ export const OutgoingOrdersPage: React.FC = () => {
                   <BookOpen className="w-4 h-4 text-red-600" />
                   <span>Order Books / Items ({editFormData.items.length})</span>
                 </h4>
-                <button
-                  type="button"
-                  onClick={handleAddEditItem}
-                  className="px-2.5 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg flex items-center gap-1 transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Add Book</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {editFormData.items.some((it) => (it.dispatchedQuantity || 0) > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditFormData((prev) => ({
+                          ...prev,
+                          items: prev.items.map((it) => ({ ...it, dispatchedQuantity: 0 })),
+                        }));
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg cursor-pointer transition-colors"
+                      title="Reset all book dispatched counts to 0 so the order can be scanned fresh"
+                    >
+                      ↺ Reset Status to Pending (0 Dispatched)
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAddEditItem}
+                    className="px-2.5 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Book</span>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -2399,7 +2416,7 @@ export const OutgoingOrdersPage: React.FC = () => {
                       />
                     </div>
 
-                    <div className="w-24">
+                    <div className="w-20">
                       <label className="block text-[10px] font-bold text-slate-500 uppercase">Req Qty</label>
                       <input
                         type="number"
@@ -2407,6 +2424,22 @@ export const OutgoingOrdersPage: React.FC = () => {
                         value={item.requiredQuantity}
                         onChange={(e) => handleEditItemChange(idx, 'requiredQuantity', Math.max(1, parseInt(e.target.value) || 1))}
                         className="w-full px-2 py-1 text-xs font-semibold text-center border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
+                      />
+                    </div>
+
+                    <div className="w-20">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Disp Qty</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.dispatchedQuantity || 0}
+                        onChange={(e) => handleEditItemChange(idx, 'dispatchedQuantity', Math.max(0, parseInt(e.target.value) || 0))}
+                        className={`w-full px-2 py-1 text-xs font-semibold text-center border rounded bg-white focus:outline-none focus:ring-1 ${
+                          (item.dispatchedQuantity || 0) >= item.requiredQuantity
+                            ? 'border-emerald-300 text-emerald-700 font-bold bg-emerald-50/50'
+                            : 'border-slate-300 text-slate-700'
+                        }`}
+                        title="Dispatched quantity. Change to 0 to mark Pending again."
                       />
                     </div>
 

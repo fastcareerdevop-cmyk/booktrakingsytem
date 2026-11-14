@@ -33,15 +33,11 @@ function isTrackingMatch(input: string, trackingId?: string | null, orderCode?: 
   const rawTrack = (trackingId || '').trim().toUpperCase();
   const rawOrder = (orderCode || '').trim().toUpperCase();
 
-  // 1. Direct exact or substring match
-  if (rawTrack && (rawInput === rawTrack || rawTrack.includes(rawInput) || rawInput.includes(rawTrack))) {
-    return true;
-  }
-  if (rawOrder && (rawInput === rawOrder || rawOrder.includes(rawInput) || rawInput.includes(rawOrder))) {
-    return true;
-  }
+  // 1. Direct exact match (case-insensitive, trimmed)
+  if (rawTrack && rawInput === rawTrack) return true;
+  if (rawOrder && rawInput === rawOrder) return true;
 
-  // 2. Alphanumeric match (ignoring spaces, dashes, hyphens, slashes, colons, hashes, dots, etc.)
+  // 2. Alphanumeric match (ignoring spaces, dashes, hyphens, slashes, colons, hashes, dots)
   const cleanInput = cleanTrackingString(input);
   const cleanTrack = cleanTrackingString(trackingId || '');
   const cleanOrder = cleanTrackingString(orderCode || '');
@@ -49,18 +45,12 @@ function isTrackingMatch(input: string, trackingId?: string | null, orderCode?: 
   if (cleanTrack && cleanInput === cleanTrack) return true;
   if (cleanOrder && cleanInput === cleanOrder) return true;
 
-  // 3. Substring match for tracking IDs of meaningful length (>= 5)
-  if (cleanTrack && cleanTrack.length >= 5) {
-    if (cleanInput.includes(cleanTrack) || cleanTrack.includes(cleanInput)) return true;
-  }
-  if (cleanOrder && cleanOrder.length >= 5) {
-    if (cleanInput.includes(cleanOrder) || cleanOrder.includes(cleanInput)) return true;
-  }
-
-  // 4. Strip common barcode/courier prefixes like ]C1, ]e0, AWB, TRK, DTDC, DEL
-  const strippedInput = cleanInput.replace(/^(?:AWB|TRK|TRACK|DTDC|DEL|C1|E0|Q1|D1)+/gi, '');
-  if (strippedInput && cleanTrack && (strippedInput === cleanTrack || cleanTrack.includes(strippedInput) || strippedInput.includes(cleanTrack))) {
-    return true;
+  // 3. Strip standard scanner AIM symbology prefixes (]C1, ]e0, ]d2) or label prefixes (AWB:, TRK:)
+  // NOTE: Never strip 'D1' because Indian courier tracking IDs (e.g. D1020119929) start with D1!
+  const strippedInput = cleanInput.replace(/^(?:C1|E0|D2|AWB|TRK|TRACK)/gi, '');
+  if (strippedInput && strippedInput !== cleanInput) {
+    if (cleanTrack && strippedInput === cleanTrack) return true;
+    if (cleanOrder && strippedInput === cleanOrder) return true;
   }
 
   return false;
@@ -178,46 +168,58 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
         return errorResponse(res, 'Tracking ID scan karna anivarya hai.', 'TRACKING_ID_REQUIRED', 400);
       }
 
-      // 1. Try finding by targetOrderId if provided
+      // 1. If targetOrderId is provided (normal workflow: verifying active order on screen)
       let order = targetOrderId ? await Order.findById(targetOrderId) : null;
-      let isMatch = order ? isTrackingMatch(trackingCode, order.trackingId, order.orderCode) : false;
 
-      // 2. If targetOrderId was not provided, not found, or did not match the scanned code,
-      // search for candidate orders in DB that match this trackingCode or orderCode!
-      if (!isMatch) {
+      if (targetOrderId) {
+        if (!order) {
+          return errorResponse(res, 'Order nahi mila.', 'ORDER_NOT_FOUND', 404);
+        }
+
+        const isMatch = isTrackingMatch(trackingCode, order.trackingId, order.orderCode);
+        if (!isMatch) {
+          // STRICT SAFETY: Never switch to another order! Prevent accidental completion of other students' orders!
+          return errorResponse(
+            res,
+            `❌ Galat Tracking ID "${trackingCode}"! Yeh Tracking ID "${order.studentName}" ke order ki nahi hai. Sahi Tracking ID: "${order.trackingId || order.orderCode || 'N/A'}"`,
+            'TRACKING_ID_MISMATCH',
+            400
+          );
+        }
+      } else {
+        // 2. If no targetOrderId was provided (standalone tracking barcode scan)
         const cleanInput = cleanTrackingString(trackingCode);
-        const flexRegex = buildFlexibleTrackingRegex(trackingCode);
+        const flexPattern = cleanInput ? cleanInput.split('').map(c => escapeRegex(c)).join('[\\s\\-_]*') : '';
         const candidateOrders = await Order.find({
           $or: [
             { trackingId: trackingCode },
             { orderCode: trackingCode },
-            { trackingId: flexRegex },
-            { orderCode: flexRegex },
             { trackingId: new RegExp(`^${escapeRegex(trackingCode)}$`, 'i') },
             { orderCode: new RegExp(`^${escapeRegex(trackingCode)}$`, 'i') },
-            ...(cleanInput.length >= 4 ? [
-              { trackingId: new RegExp(escapeRegex(cleanInput), 'i') },
-              { orderCode: new RegExp(escapeRegex(cleanInput), 'i') },
+            ...(flexPattern ? [
+              { trackingId: { $regex: `^${flexPattern}$`, $options: 'i' } },
+              { orderCode: { $regex: `^${flexPattern}$`, $options: 'i' } },
             ] : []),
           ],
-        }).limit(20);
+        }).limit(10);
 
+        let matchedCandidate = null;
         for (const cand of candidateOrders) {
           if (isTrackingMatch(trackingCode, cand.trackingId, cand.orderCode)) {
-            order = cand;
-            isMatch = true;
+            matchedCandidate = cand;
             break;
           }
         }
-      }
 
-      if (!order || !isMatch) {
-        return errorResponse(
-          res,
-          `❌ Galat Tracking ID "${trackingCode}"! Sahi Tracking ID: "${order?.trackingId || order?.orderCode || 'N/A'}"`,
-          'TRACKING_ID_MISMATCH',
-          400
-        );
+        if (!matchedCandidate) {
+          return errorResponse(
+            res,
+            `❌ Tracking ID / Barcode "${trackingCode}" se koi order nahi mila.`,
+            'TRACKING_ID_MISMATCH',
+            400
+          );
+        }
+        order = matchedCandidate;
       }
 
       // Tracking ID MATCHED! Atomically deduct stock from BookStock and complete order items!
@@ -593,7 +595,7 @@ export async function verifyAndDispatch(req: AuthenticatedRequest, res: Response
           );
           return successResponse(
             res,
-            `Book Code "${scannedCode}" Scanned & Verified! 1 copy verified for ${activeOrder.studentName}.`,
+            result.message || `Book Code "${scannedCode}" Scanned & Verified! 1 copy verified for ${activeOrder.studentName}.`,
             { ...result, scanType: 'BOOK_CODE', verifiedBookCode: scannedCode, notification }
           );
         }

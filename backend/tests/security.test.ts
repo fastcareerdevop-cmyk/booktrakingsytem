@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import mongoose from 'mongoose';
 import app from '../src/app';
 import { connectDatabase, disconnectDatabase } from '../src/config/db';
 import { User, Order, ImportBatch, SecuritySetting } from '../src/models';
@@ -393,6 +394,49 @@ describe('Admin Security PIN & Order Edit Integration Tests', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.code).toBe('TRACKING_ID_MISMATCH');
+    });
+
+    it('should NOT complete Order B when scanning Order B tracking code while Order A is active', async () => {
+      // Create separate Order B in pending state
+      const orderB = await Order.create({
+        orderCode: '131126099',
+        studentName: 'Other Student B',
+        mobileNumber: '9988776655',
+        importBatchId: new mongoose.Types.ObjectId(),
+        trackingId: 'D1020119999',
+        productCode: 'PROD-B',
+        items: [
+          {
+            bookCode: 'TEST-B-01',
+            bookName: 'Book B',
+            requiredQuantity: 1,
+            dispatchedQuantity: 0,
+            pendingQuantity: 1,
+            status: 'PENDING',
+          },
+        ],
+      });
+
+      try {
+        // While Order A (trackingOrder) is active on screen, operator scans Order B's tracking ID
+        const res = await request(app)
+          .post('/api/dispatch/verify')
+          .set('Authorization', `Bearer ${employeeToken}`)
+          .send({
+            action: 'CONFIRM_DISPATCH_WITH_TRACKING',
+            orderId: trackingOrder._id.toString(), // Order A
+            trackingCode: 'D1020119999', // Order B's tracking ID!
+          });
+
+        expect(res.status).toBe(400);
+        expect(res.body.code).toBe('TRACKING_ID_MISMATCH');
+
+        // Verify Order B was NOT silently completed in the database!
+        const refreshedB = await Order.findById(orderB._id);
+        expect(refreshedB!.items[0].dispatchedQuantity).toBe(0);
+      } finally {
+        await Order.findByIdAndDelete(orderB._id);
+      }
     });
   });
 });
