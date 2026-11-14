@@ -96,6 +96,7 @@ export interface Order {
   emailSentAt?: string | null;
   whatsappSentAt?: string | null;
   trackingId: string;
+  weight?: string;
   importBatchId: string;
   createdAt: string;
   updatedAt: string;

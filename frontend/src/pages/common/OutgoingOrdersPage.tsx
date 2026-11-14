@@ -148,6 +148,7 @@ export const OutgoingOrdersPage: React.FC = () => {
     scanType?: string;
     studentName?: string;
     trackingId?: string;
+    weight?: string;
     itemsDispatched?: number;
   }>({ type: null, message: '' });
   const [isScanning, setIsScanning] = useState(false);
@@ -163,6 +164,7 @@ export const OutgoingOrdersPage: React.FC = () => {
     mobileNumber: string;
     email: string;
     trackingId: string;
+    weight: string;
     productCode: string;
     items: Array<{
       _id?: string;
@@ -176,6 +178,7 @@ export const OutgoingOrdersPage: React.FC = () => {
     mobileNumber: '',
     email: '',
     trackingId: '',
+    weight: '',
     productCode: '',
     items: [],
   });
@@ -1003,6 +1006,7 @@ export const OutgoingOrdersPage: React.FC = () => {
       mobileNumber: order.mobileNumber || '',
       email: order.email || '',
       trackingId: order.trackingId || '',
+      weight: (order as any).weight || '',
       productCode: order.productCode || '',
       items: (order.items || []).map((it: any) => ({
         _id: it.id || it._id,
@@ -1072,6 +1076,7 @@ export const OutgoingOrdersPage: React.FC = () => {
             mobileNumber: editFormData.mobileNumber,
             email: editFormData.email,
             trackingId: editFormData.trackingId,
+            weight: editFormData.weight,
             productCode: editFormData.productCode,
             items: editFormData.items,
           });
@@ -2068,6 +2073,11 @@ export const OutgoingOrdersPage: React.FC = () => {
                           <span className="font-mono font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded border border-red-200 text-xs inline-block">
                             {order.trackingId}
                           </span>
+                          {(order as any).weight && (
+                            <span className="block mt-1 text-[10px] font-semibold text-slate-600">
+                              ⚖️ {(order as any).weight}
+                            </span>
+                          )}
                         </td>
 
                         {/* Books Preview Pills */}
@@ -2338,7 +2348,7 @@ export const OutgoingOrdersPage: React.FC = () => {
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Product Code (Combo / Course)
                 </label>
@@ -2348,6 +2358,19 @@ export const OutgoingOrdersPage: React.FC = () => {
                   onChange={(e) => setEditFormData({ ...editFormData, productCode: e.target.value.toUpperCase() })}
                   className="w-full px-3 py-2 text-sm font-mono uppercase border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
                   placeholder="e.g. PROD-CA-FINAL"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Weight (वजन)
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.weight || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, weight: e.target.value })}
+                  className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. 1.5 kg, 500g"
                 />
               </div>
             </div>

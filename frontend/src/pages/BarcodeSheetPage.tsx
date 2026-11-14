@@ -55,6 +55,7 @@ interface BarcodeOrder {
   mobileNumber: string;
   email: string | null;
   trackingId: string;
+  weight?: string;
   totalRequired: number;
   totalDispatched: number;
   status: string;
@@ -214,6 +215,7 @@ export const BarcodeSheetPage: React.FC = () => {
           'S.No': idx + 1,
           'Student Code (Barcode)': order.orderCode || '-',
           'Tracking ID': order.trackingId || '-',
+          'Weight': order.weight || '-',
           'Student Name': order.studentName || '-',
           'Mobile Number': order.mobileNumber || '-',
           'Email': order.email || '-',
@@ -1256,6 +1258,7 @@ export const BarcodeSheetPage: React.FC = () => {
                     <th className="py-3 px-3 text-center w-64">Bar Code (बारकोड)</th>
                     <th className="py-3 px-3 whitespace-nowrap">Student Code</th>
                     <th className="py-3 px-3 whitespace-nowrap">Tracking ID</th>
+                    <th className="py-3 px-3 whitespace-nowrap">Weight</th>
                     <th className="py-3 px-3 whitespace-nowrap">Student Name</th>
                     <th className="py-3 px-3">Course (कोर्स)</th>
                     <th className="py-3 px-3 whitespace-nowrap">P_Code</th>
@@ -1315,6 +1318,13 @@ export const BarcodeSheetPage: React.FC = () => {
                       <td className="py-2.5 px-3 tracking-cell whitespace-nowrap">
                         <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded border border-slate-200 text-sm">
                           {order.trackingId || '-'}
+                        </span>
+                      </td>
+
+                      {/* Weight */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="font-mono font-bold text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-xs">
+                          {order.weight || '-'}
                         </span>
                       </td>
 
@@ -1440,6 +1450,11 @@ export const BarcodeSheetPage: React.FC = () => {
                     </div>
                     <p className="text-[10px] text-slate-500 mt-1 break-words">
                       Tracking ID: <strong className="font-mono text-red-700">{order.trackingId || '-'}</strong>
+                      {order.weight && (
+                        <span className="ml-2 font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                          ⚖️ {order.weight}
+                        </span>
+                      )}
                     </p>
                     <p className="text-[10px] text-slate-500 mt-0.5 break-all">
                       Student Code: <strong className="font-mono text-slate-700">{order.orderCode || '-'}</strong>

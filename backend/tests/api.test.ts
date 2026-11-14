@@ -116,6 +116,7 @@ describe('FAST DISPATCH PRO Backend API Tests (MongoDB & Mongoose)', () => {
         { header: 'Mobile Number', key: 'mobileNumber' },
         { header: 'Email', key: 'email' },
         { header: 'Tracking ID', key: 'trackingId' },
+        { header: 'Weight', key: 'weight' },
         { header: 'Book Code', key: 'bookCode' },
         { header: 'Book Name', key: 'bookName' },
         { header: 'Quantity', key: 'quantity' },
@@ -126,6 +127,7 @@ describe('FAST DISPATCH PRO Backend API Tests (MongoDB & Mongoose)', () => {
         mobileNumber: '9988776655',
         email: 'test1@example.com',
         trackingId: 'TR999',
+        weight: '1.5 kg',
         bookCode: 'MATH101',
         bookName: 'Mathematics Part 1',
         quantity: 2,
@@ -136,6 +138,7 @@ describe('FAST DISPATCH PRO Backend API Tests (MongoDB & Mongoose)', () => {
         mobileNumber: '9988776656',
         email: 'test2@example.com',
         trackingId: 'TR1000',
+        weight: '1.2 kg',
         bookCode: 'ENG201',
         bookName: 'English Literature',
         quantity: -1,
@@ -155,6 +158,66 @@ describe('FAST DISPATCH PRO Backend API Tests (MongoDB & Mongoose)', () => {
       expect(res.body.data.invalidRows[0].errors).toContain('Quantity must be a positive integer greater than 0.');
     });
 
+    it('should reject preview when Weight column is missing in Excel header', async () => {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Orders No Weight');
+      worksheet.columns = [
+        { header: 'Student Name', key: 'studentName' },
+        { header: 'Mobile Number', key: 'mobileNumber' },
+        { header: 'Tracking ID', key: 'trackingId' },
+        { header: 'Book Code', key: 'bookCode' },
+        { header: 'Book Name', key: 'bookName' },
+      ];
+      worksheet.addRow({
+        studentName: 'No Weight Student',
+        mobileNumber: '9988776655',
+        trackingId: 'TRNOWEIGHT',
+        bookCode: 'MATH101',
+        bookName: 'Mathematics',
+      });
+      const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+      const res = await request(app)
+        .post('/api/imports/preview')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', buffer, 'no_weight.xlsx');
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe('MISSING_COLUMNS');
+      expect(res.body.message).toContain('Weight');
+    });
+
+    it('should mark row as invalid if Weight column is empty in a row', async () => {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Orders Empty Weight');
+      worksheet.columns = [
+        { header: 'Student Name', key: 'studentName' },
+        { header: 'Mobile Number', key: 'mobileNumber' },
+        { header: 'Tracking ID', key: 'trackingId' },
+        { header: 'Weight', key: 'weight' },
+        { header: 'Book Code', key: 'bookCode' },
+        { header: 'Book Name', key: 'bookName' },
+      ];
+      worksheet.addRow({
+        studentName: 'Empty Weight Student',
+        mobileNumber: '9988776655',
+        trackingId: 'TREMPTYWT',
+        weight: '', // Empty weight!
+        bookCode: 'MATH101',
+        bookName: 'Mathematics',
+      });
+      const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+      const res = await request(app)
+        .post('/api/imports/preview')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .attach('file', buffer, 'empty_weight.xlsx');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.invalidRowsCount).toBe(1);
+      expect(res.body.data.invalidRows[0].errors.some((e: string) => e.includes('Weight'))).toBe(true);
+    });
+
     it('should keep a single book order product code blank and preserve its book code', async () => {
       await Order.deleteMany({ trackingId: 'SINGLEBOOKTEST' });
       await ImportBatch.deleteMany({ originalFileName: 'single_book_order.xlsx' });
@@ -166,6 +229,7 @@ describe('FAST DISPATCH PRO Backend API Tests (MongoDB & Mongoose)', () => {
         { header: 'Mobile Number', key: 'mobileNumber' },
         { header: 'Email', key: 'email' },
         { header: 'Tracking ID', key: 'trackingId' },
+        { header: 'Weight', key: 'weight' },
         { header: 'P_CODE', key: 'productCode' },
         { header: 'Course', key: 'course' },
         { header: 'P_Books', key: 'bookCode' },
@@ -176,6 +240,7 @@ describe('FAST DISPATCH PRO Backend API Tests (MongoDB & Mongoose)', () => {
         mobileNumber: '9988776655',
         email: 'singlebook@example.com',
         trackingId: 'SINGLEBOOKTEST',
+        weight: '500g',
         productCode: '',
         course: 'Single Book Course',
         bookCode: 'SINGLE-BOOK-001',
@@ -271,6 +336,7 @@ describe('FAST DISPATCH PRO Backend API Tests (MongoDB & Mongoose)', () => {
         { header: 'Student Name', key: 'studentName' },
         { header: 'Mobile Number', key: 'mobileNumber' },
         { header: 'Tracking ID', key: 'trackingId' },
+        { header: 'Weight', key: 'weight' },
         { header: 'P_CODE', key: 'productCode' },
         { header: 'Course', key: 'course' },
         { header: 'P_Books', key: 'bookCode' },
@@ -280,6 +346,7 @@ describe('FAST DISPATCH PRO Backend API Tests (MongoDB & Mongoose)', () => {
         studentName: 'Product Scan Test Student',
         mobileNumber: '9988776655',
         trackingId,
+        weight: '1.8 kg',
         productCode: 'PRODUCT-SCAN-COMBO-001',
         course: 'Product Scan Test Course',
         bookCode,

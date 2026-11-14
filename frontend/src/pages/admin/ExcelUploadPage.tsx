@@ -288,7 +288,7 @@ export const ExcelUploadPage: React.FC = () => {
                   {file ? file.name : 'Click to select or drag and drop your Excel file'}
                 </h3>
                 <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                  Required columns: Student Name, Mobile Number, Email, Tracking ID, Book Code, Book Name, Quantity
+                  Required columns: Student Name, Mobile Number, Tracking ID, Weight, Course / Product Code, Book Code, Quantity
                 </p>
                 {file && (
                   <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 bg-red-100/70 text-red-800 rounded-lg text-xs font-mono">
@@ -310,7 +310,7 @@ export const ExcelUploadPage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       const csvContent =
-                        'data:text/csv;charset=utf-8,Student Name,Mobile Number,Email,Tracking ID,Book Code,Book Name,Quantity\nRahul Sharma,9876543210,rahul@example.com,TR101,QB101,Quantitative Bank,2\nRahul Sharma,9876543210,rahul@example.com,TR101,MCQ201,MCQ Book,1\nPriya Verma,9876543211,priya@example.com,TR102,QB101,Quantitative Bank,3';
+                        'data:text/csv;charset=utf-8,Student Name,Mobile Number,Email,Tracking ID,Weight,Book Code,Book Name,Quantity\nRahul Sharma,9876543210,rahul@example.com,TR101,1.5 kg,QB101,Quantitative Bank,2\nRahul Sharma,9876543210,rahul@example.com,TR101,1.5 kg,MCQ201,MCQ Book,1\nPriya Verma,9876543211,priya@example.com,TR102,2.0 kg,QB101,Quantitative Bank,3';
                       const encodedUri = encodeURI(csvContent);
                       const link = document.createElement('a');
                       link.setAttribute('href', encodedUri);
@@ -328,7 +328,7 @@ export const ExcelUploadPage: React.FC = () => {
                     type="button"
                     onClick={() => {
                       const csvContent =
-                        'data:text/csv;charset=utf-8,name,phone,product_name,tracking_number,dispatch_date,courier\nRahul Sharma,919584510000,CA Inter IDT Full Book Set 8.0,C1144011340IN,03-10-2026,India Post\nPriya Patel,918889888034,CA Final Tax Fast Track Book,DT987654321IN,03-10-2026,DTDC Courier';
+                        'data:text/csv;charset=utf-8,name,phone,product_name,tracking_number,weight,dispatch_date,courier\nRahul Sharma,919584510000,CA Inter IDT Full Book Set 8.0,C1144011340IN,1.8 kg,03-10-2026,India Post\nPriya Patel,918889888034,CA Final Tax Fast Track Book,DT987654321IN,1.2 kg,03-10-2026,DTDC Courier';
                       const encodedUri = encodeURI(csvContent);
                       const link = document.createElement('a');
                       link.setAttribute('href', encodedUri);
@@ -466,6 +466,21 @@ export const ExcelUploadPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Strict Validation Banner: If any invalid rows exist */}
+          {previewData.invalidRowsCount > 0 && (
+            <div className="p-4 rounded-xl border border-rose-300 bg-rose-50 text-rose-900 flex items-start gap-3 shadow-xs">
+              <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <h4 className="font-bold text-rose-800 text-sm">
+                  ⚠️ Excel Upload Blocked: {previewData.invalidRowsCount} Row(s) me Data Missing ya Galat hai!
+                </h4>
+                <p className="text-xs text-rose-700 mt-1">
+                  Excel sheet tabhi import ho sakti hai jab <strong>sabhi rows me pura data</strong> (Student Name, Mobile Number, Tracking ID, Weight, Course/Book) bhara hua ho. Kripya niche invalid rows dekhein ya "Download Invalid Rows" par click karke error theek karein aur dobara upload karein.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Action Row */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center gap-2">
@@ -487,11 +502,13 @@ export const ExcelUploadPage: React.FC = () => {
 
             <Button
               variant="primary"
-              disabled={previewData.validRowsCount === 0}
+              disabled={previewData.validRowsCount === 0 || previewData.invalidRowsCount > 0}
               onClick={() => setConfirmModalOpen(true)}
-              icon={<CheckCircle2 className="w-4 h-4" />}
+              icon={previewData.invalidRowsCount > 0 ? <AlertTriangle className="w-4 h-4 text-rose-300" /> : <CheckCircle2 className="w-4 h-4" />}
             >
-              Confirm & Import {previewData.validRowsCount} Orders
+              {previewData.invalidRowsCount > 0
+                ? `Upload Blocked (${previewData.invalidRowsCount} Invalid Rows)`
+                : `Confirm & Import ${previewData.validRowsCount} Orders`}
             </Button>
           </div>
 
@@ -508,6 +525,7 @@ export const ExcelUploadPage: React.FC = () => {
                       <th className="py-2.5 px-3">Row #</th>
                       <th className="py-2.5 px-3">Student Name</th>
                       <th className="py-2.5 px-3">Tracking ID</th>
+                      <th className="py-2.5 px-3">Weight</th>
                       <th className="py-2.5 px-3">Book Code</th>
                       <th className="py-2.5 px-3">Errors</th>
                     </tr>
@@ -518,6 +536,7 @@ export const ExcelUploadPage: React.FC = () => {
                         <td className="py-2.5 px-3 font-mono font-medium text-slate-600">{row.rowNumber}</td>
                         <td className="py-2.5 px-3 font-medium text-slate-800">{row.studentName || '-'}</td>
                         <td className="py-2.5 px-3 font-mono text-slate-600">{row.trackingId || '-'}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600">{row.weight || '-'}</td>
                         <td className="py-2.5 px-3 font-mono text-slate-600">{row.bookCode || '-'}</td>
                         <td className="py-2.5 px-3 text-rose-600">
                           <ul className="list-disc list-inside space-y-0.5">
@@ -547,6 +566,7 @@ export const ExcelUploadPage: React.FC = () => {
                     <th className="py-2.5 px-3">Student Name</th>
                     <th className="py-2.5 px-3">Mobile Number</th>
                     <th className="py-2.5 px-3">Tracking ID</th>
+                    <th className="py-2.5 px-3">Weight</th>
                     <th className="py-2.5 px-3">Book Code</th>
                     <th className="py-2.5 px-3">Book Name</th>
                     <th className="py-2.5 px-3 text-right">Quantity</th>
@@ -559,6 +579,7 @@ export const ExcelUploadPage: React.FC = () => {
                       <td className="py-2 px-3 font-medium text-slate-800">{row.studentName}</td>
                       <td className="py-2 px-3 font-mono text-slate-600">{row.mobileNumber}</td>
                       <td className="py-2 px-3 font-mono font-medium text-red-600">{row.trackingId}</td>
+                      <td className="py-2 px-3 font-mono font-semibold text-slate-700 bg-slate-50">{row.weight || '-'}</td>
                       <td className="py-2 px-3 font-mono font-semibold text-slate-800">{row.bookCode}</td>
                       <td className="py-2 px-3 text-slate-600">{row.bookName}</td>
                       <td className="py-2 px-3 font-mono font-bold text-slate-800 text-right">{row.quantity}</td>

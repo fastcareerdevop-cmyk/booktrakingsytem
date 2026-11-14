@@ -119,6 +119,7 @@ export async function listOrders(params: ListOrdersParams) {
       emailSentAt: order.emailSentAt,
       whatsappSentAt: order.whatsappSentAt,
       trackingId: order.trackingId,
+      weight: order.weight || '',
       courierName: order.courierName || '',
       courierTrackingUrl: order.courierTrackingUrl || '',
       importBatchId: order.importBatchId?._id?.toString() || order.importBatchId?.toString(),
@@ -417,6 +418,7 @@ export async function getOrderById(orderId: string) {
     emailSentAt: order.emailSentAt,
     whatsappSentAt: order.whatsappSentAt,
     trackingId: order.trackingId,
+    weight: order.weight || '',
     courierName: order.courierName || '',
     courierTrackingUrl: order.courierTrackingUrl || '',
     importBatchId: order.importBatchId?._id?.toString() || order.importBatchId?.toString(),
@@ -513,7 +515,7 @@ export async function getBarcodeSheetData(params: {
   }
 
   const orders = await Order.find(query)
-    .select('orderCode productCode studentName mobileNumber email trackingId items createdAt')
+    .select('orderCode productCode studentName mobileNumber email trackingId weight items createdAt')
     .sort({ orderCode: 1 });
 
   return orders.map((order: any) => {
@@ -541,6 +543,7 @@ export async function getBarcodeSheetData(params: {
       mobileNumber: order.mobileNumber,
       email: order.email,
       trackingId: order.trackingId,
+      weight: order.weight || '',
       createdAt: order.createdAt,
       totalRequired: order.items.reduce((s: number, i: any) => s + i.requiredQuantity, 0),
       totalDispatched: order.items.reduce((s: number, i: any) => s + i.dispatchedQuantity, 0),
@@ -644,6 +647,7 @@ export interface AdminUpdateOrderInput {
   mobileNumber?: string;
   email?: string;
   trackingId?: string;
+  weight?: string;
   productCode?: string;
   items?: {
     _id?: string;
@@ -682,6 +686,7 @@ export async function adminUpdateOrder(
   if (data.mobileNumber !== undefined) order.mobileNumber = data.mobileNumber.trim();
   if (data.email !== undefined) order.email = data.email ? data.email.trim().toLowerCase() : null;
   if (data.trackingId !== undefined) order.trackingId = data.trackingId.trim().toUpperCase();
+  if (data.weight !== undefined) order.weight = data.weight.trim();
   if (data.productCode !== undefined) order.productCode = data.productCode.trim().toUpperCase();
 
   if (Array.isArray(data.items) && data.items.length > 0) {

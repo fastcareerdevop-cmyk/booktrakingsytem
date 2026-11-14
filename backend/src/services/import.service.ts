@@ -13,6 +13,7 @@ export interface ParsedRowData {
   mobileNumber: string;
   email: string | null;
   trackingId: string;
+  weight?: string;
   courierName?: string;
   courierTrackingUrl?: string;
   productCode: string;
@@ -278,12 +279,28 @@ export async function parseAndPreviewExcel(
     else if (val.includes('quantity') || val.includes('qty') || val === 'count' || val === 'pcs') {
       columnMap['quantity'] = colNumber;
     }
+    // Weight (mandatory parcel weight e.g. 1.2 kg, 500g, wt, weight)
+    else if (
+      val.includes('weight') ||
+      val === 'wt' ||
+      val === 'wt.' ||
+      val.includes('weight(kg)') ||
+      val.includes('weight (kg)') ||
+      val.includes('weight(g)') ||
+      val.includes('weight (g)') ||
+      val.includes('vajan') ||
+      val.includes('parcel weight') ||
+      val.includes('pkg weight')
+    ) {
+      columnMap['weight'] = colNumber;
+    }
   });
 
-  // Verify minimal required columns
+  // Verify minimal required columns (Strict requirement: Student Name, Mobile Number, Weight, and Book/Product)
   const missingCols: string[] = [];
   if (!columnMap['studentName']) missingCols.push('Student Name (or Name)');
   if (!columnMap['mobileNumber']) missingCols.push('Mobile Number (or Phone)');
+  if (!columnMap['weight']) missingCols.push('Weight (वजन)');
   if (!columnMap['pBooks'] && !columnMap['bookCode'] && !columnMap['productCode'] && !columnMap['productName'] && !columnMap['bookName']) {
     missingCols.push('Book/Product information (Course, P_Code, p_Books, or Book Name)');
   }
@@ -291,8 +308,9 @@ export async function parseAndPreviewExcel(
   if (missingCols.length > 0) {
     throw {
       statusCode: 400,
-      message: `Missing required Excel columns: ${missingCols.join(', ')}. Please check your sheet headers.`,
+      message: `❌ Excel sheet me anivarya columns missing hain: ${missingCols.join(', ')}. Kripya Excel sheet me "Weight" sahit sabhi zaroori columns add karein.`,
       code: 'MISSING_COLUMNS',
+      missingColumns: missingCols,
     };
   }
 
@@ -382,6 +400,8 @@ export async function parseAndPreviewExcel(
     const rowErrors: string[] = [];
     const studentName = studentStr;
     const mobileNumber = normalizeMobileNumber(rawMob as any);
+    const rawWeight = columnMap['weight'] ? row.getCell(columnMap['weight']).value : null;
+    const weight = rawWeight !== null && rawWeight !== undefined ? String(rawWeight).trim() : '';
     const rawEmail = columnMap['email'] ? row.getCell(columnMap['email']).value : null;
     const rawQuantity = columnMap['quantity'] ? row.getCell(columnMap['quantity']).value : 1;
     const email = rawEmail ? normalizeEmail(String(rawEmail)) : null;
@@ -421,11 +441,15 @@ export async function parseAndPreviewExcel(
     courierName = courierResolved.courierName;
     courierTrackingUrl = courierResolved.courierTrackingUrl;
 
-    if (!studentName) rowErrors.push('Student name is required.');
+    // Strict validation: Every column must have data!
+    if (!studentName) rowErrors.push('Student Name missing / khali hai.');
     if (!mobileNumber) {
-      rowErrors.push('Mobile number is required.');
+      rowErrors.push('Mobile Number missing / khali hai.');
     } else if (!mobileRegex.test(mobileNumber)) {
       rowErrors.push('Invalid mobile number format.');
+    }
+    if (!weight) {
+      rowErrors.push('Weight (वजन) missing / khali hai.');
     }
     if (rawEmail && email && !emailRegex.test(email)) {
       rowErrors.push('Invalid email format.');
@@ -434,10 +458,14 @@ export async function parseAndPreviewExcel(
       rowErrors.push('Quantity must be a positive integer greater than 0.');
     }
 
-    // Tracking ID: if column present and non-empty, use it; else auto-generate DDMMYYNNN
+    // Tracking ID: if column present, must have valid non-empty data
     let trackingId = '';
     const rawTrack = columnMap['trackingId'] ? row.getCell(columnMap['trackingId']).value : null;
-    if (rawTrack && String(rawTrack).trim()) {
+    const trackStr = rawTrack !== null && rawTrack !== undefined ? String(rawTrack).trim() : '';
+    if (columnMap['trackingId'] && !trackStr) {
+      rowErrors.push('Tracking ID missing / khali hai.');
+    }
+    if (trackStr) {
       trackingId = normalizeTrackingId(rawTrack as any);
     } else {
       trackingId = `${datePrefix}${String(autoTrackingCounter).padStart(3, '0')}`;
@@ -450,6 +478,10 @@ export async function parseAndPreviewExcel(
     const rawBooks = (columnMap['pBooks'] ? String(row.getCell(columnMap['pBooks']).value || '').trim() : '') ||
                      (columnMap['bookCode'] ? String(row.getCell(columnMap['bookCode']).value || '').trim() : rawPCode);
     const rawBookName = columnMap['bookName'] ? String(row.getCell(columnMap['bookName']).value || '').trim() : '';
+
+    if (!rawCourse && !rawPCode && !rawBooks && !rawBookName) {
+      rowErrors.push('Course / Product / Book data missing / khali hai.');
+    }
 
     // Split multi-line cells (\n)
     const courseLines = rawCourse.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
@@ -497,6 +529,7 @@ export async function parseAndPreviewExcel(
           mobileNumber,
           email,
           trackingId,
+          weight,
           courierName,
           courierTrackingUrl,
           productCode: cleanProductCode,
@@ -547,6 +580,7 @@ export async function exportInvalidRowsExcel(invalidRows: ParsedRowData[]): Prom
     { header: 'Mobile Number', key: 'mobileNumber', width: 18 },
     { header: 'Email', key: 'email', width: 25 },
     { header: 'Tracking ID', key: 'trackingId', width: 16 },
+    { header: 'Weight', key: 'weight', width: 14 },
     { header: 'Product Code', key: 'productCode', width: 16 },
     { header: 'Product Name', key: 'productName', width: 30 },
     { header: 'Book Code', key: 'bookCode', width: 15 },
@@ -569,6 +603,7 @@ export async function exportInvalidRowsExcel(invalidRows: ParsedRowData[]): Prom
       mobileNumber: row.mobileNumber,
       email: row.email || '',
       trackingId: row.trackingId,
+      weight: row.weight || '',
       productCode: row.productCode,
       productName: row.productName,
       bookCode: row.bookCode,
@@ -593,6 +628,15 @@ export async function confirmImport(
     throw { statusCode: 400, message: 'No valid rows to import', code: 'NO_VALID_ROWS' };
   }
 
+  // Strict validation: Reject import if any rows had errors or missing column data!
+  if (invalidRowsSummary && invalidRowsSummary.length > 0) {
+    throw {
+      statusCode: 400,
+      message: `❌ Excel upload nahi ho sakti kyunki ${invalidRowsSummary.length} row(s) me data missing ya invalid hai. Sabhi columns me data hona anivarya hai.`,
+      code: 'INVALID_ROWS_EXIST',
+    };
+  }
+
   const batch = await ImportBatch.create({
     originalFileName,
     uploadedByUserId: new mongoose.Types.ObjectId(userId),
@@ -611,6 +655,7 @@ export async function confirmImport(
     mobileNumber: string;
     email: string | null;
     trackingId: string;
+    weight: string;
     courierName: string;
     courierTrackingUrl: string;
     items: {
@@ -630,12 +675,14 @@ export async function confirmImport(
         mobileNumber: row.mobileNumber,
         email: row.email,
         trackingId: row.trackingId,
+        weight: row.weight || '',
         courierName: row.courierName || '',
         courierTrackingUrl: row.courierTrackingUrl || '',
         items: [],
       });
     } else {
       const existingGroup = orderGroups.get(orderKey)!;
+      if (!existingGroup.weight && row.weight) existingGroup.weight = row.weight;
       if (!existingGroup.courierName && row.courierName) existingGroup.courierName = row.courierName;
       if (!existingGroup.courierTrackingUrl && row.courierTrackingUrl) {
         existingGroup.courierTrackingUrl = row.courierTrackingUrl;
@@ -701,6 +748,7 @@ export async function confirmImport(
       mobileNumber: orderData.mobileNumber,
       email: orderData.email,
       trackingId: orderData.trackingId,
+      weight: orderData.weight || '',
       courierName: orderData.courierName,
       courierTrackingUrl: orderData.courierTrackingUrl,
       importBatchId: batch._id,
