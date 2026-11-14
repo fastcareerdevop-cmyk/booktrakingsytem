@@ -157,7 +157,7 @@ export async function adminUpdateOrder(req: AuthenticatedRequest, res: Response,
       return errorResponse(res, 'Only administrators can edit order details', 'UNAUTHORIZED', 403);
     }
     const { id } = req.params;
-    const { pin, studentName, mobileNumber, email, trackingId, weight, productCode, items } = req.body;
+    const { pin, studentName, mobileNumber, email, trackingId, courierName, weight, productCode, items } = req.body;
 
     if (!pin) {
       return errorResponse(res, '4-digit Security PIN is required to update order', 'PIN_REQUIRED', 400);
@@ -165,7 +165,7 @@ export async function adminUpdateOrder(req: AuthenticatedRequest, res: Response,
 
     const updated = await orderService.adminUpdateOrder(
       id,
-      { pin, studentName, mobileNumber, email, trackingId, weight, productCode, items },
+      { pin, studentName, mobileNumber, email, trackingId, courierName, weight, productCode, items },
       { id: req.user.id, name: req.user.name }
     );
 

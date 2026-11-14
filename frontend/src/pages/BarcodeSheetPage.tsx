@@ -21,9 +21,16 @@ import {
   Layers,
   ArrowRight,
   Trash2,
+  Edit2,
+  MessageSquare,
+  KeyRound,
+  Plus,
 } from 'lucide-react';
 import { BarcodeDisplay } from '../components/common/BarcodeDisplay';
 import { DispatchBoxModal } from '../components/dispatch/DispatchBoxModal';
+import { Modal } from '../components/common/Modal';
+import { SecurityPinModal } from '../components/common/SecurityPinModal';
+import { Button } from '../components/common/Button';
 import { Order } from '../types';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -89,6 +96,41 @@ export const BarcodeSheetPage: React.FC = () => {
   // Dispatch Box Modal state
   const [activeDispatchOrder, setActiveDispatchOrder] = useState<Order | null>(null);
   const [isDispatchModalOpen, setIsDispatchModalOpen] = useState(false);
+
+  // Edit Order with PIN Modal states
+  const [editingBarcodeOrder, setEditingBarcodeOrder] = useState<BarcodeOrder | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<{
+    studentName: string;
+    mobileNumber: string;
+    email: string;
+    trackingId: string;
+    courierName: string;
+    weight: string;
+    productCode: string;
+    items: {
+      _id?: string;
+      bookCode: string;
+      bookName: string;
+      requiredQuantity: number;
+      dispatchedQuantity: number;
+    }[];
+  }>({
+    studentName: '',
+    mobileNumber: '',
+    email: '',
+    trackingId: '',
+    courierName: '',
+    weight: '',
+    productCode: '',
+    items: [],
+  });
+
+  // WhatsApp Modal states
+  const [whatsAppModalOrder, setWhatsAppModalOrder] = useState<BarcodeOrder | null>(null);
+  const [sendingWhatsAppId, setSendingWhatsAppId] = useState<string | null>(null);
 
   const printTableRef = useRef<HTMLDivElement>(null);
   const printCardsRef = useRef<HTMLDivElement>(null);
@@ -198,6 +240,145 @@ export const BarcodeSheetPage: React.FC = () => {
     } catch (err: any) {
       error('Order details load nahi ho paye');
     }
+  };
+
+  // ─── Edit Order Handlers (PIN Protected) ──────────────────────────────────
+  const handleOpenEditModal = (order: BarcodeOrder) => {
+    setEditingBarcodeOrder(order);
+    setEditFormData({
+      studentName: order.studentName || '',
+      mobileNumber: order.mobileNumber || '',
+      email: order.email || '',
+      trackingId: order.trackingId || '',
+      courierName: order.courierName || '',
+      weight: order.weight || '',
+      productCode: order.productCode || '',
+      items: (order.items || []).map((it) => ({
+        _id: it.id,
+        bookCode: it.bookCode || '',
+        bookName: it.bookName || '',
+        requiredQuantity: it.requiredQuantity || 1,
+        dispatchedQuantity: it.dispatchedQuantity || 0,
+      })),
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditItemChange = (index: number, field: string, value: any) => {
+    setEditFormData((prev) => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const handleAddEditItem = () => {
+    setEditFormData((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { bookCode: '', bookName: '', requiredQuantity: 1, dispatchedQuantity: 0 },
+      ],
+    }));
+  };
+
+  const handleRemoveEditItem = (index: number) => {
+    if (editFormData.items.length <= 1) {
+      alert('An order must contain at least one book item.');
+      return;
+    }
+    setEditFormData((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, idx) => idx !== index),
+    }));
+  };
+
+  const handleRequestSaveEdit = () => {
+    if (!editFormData.studentName.trim()) {
+      alert('Student Name is required.');
+      return;
+    }
+    if (editFormData.items.length === 0) {
+      alert('Order must have at least one book item.');
+      return;
+    }
+    if (editFormData.items.some((it) => !it.bookCode.trim() || !it.bookName.trim())) {
+      alert('All books must have a Book Code and Book Title.');
+      return;
+    }
+
+    setIsPinModalOpen(true);
+  };
+
+  const handleAuthorizeAndSaveEdit = async (pin: string) => {
+    if (!editingBarcodeOrder) return;
+    setIsSavingEdit(true);
+    try {
+      const res = await api.put(`/orders/${editingBarcodeOrder.id}`, {
+        pin,
+        studentName: editFormData.studentName,
+        mobileNumber: editFormData.mobileNumber,
+        email: editFormData.email,
+        trackingId: editFormData.trackingId,
+        courierName: editFormData.courierName,
+        weight: editFormData.weight,
+        productCode: editFormData.productCode,
+        items: editFormData.items,
+      });
+
+      if (res.data.success) {
+        setIsEditModalOpen(false);
+        setEditingBarcodeOrder(null);
+        success(`Order for ${editFormData.studentName} successfully updated with PIN!`);
+        await fetchOrders(search);
+      }
+    } catch (err: any) {
+      error(err.response?.data?.message || 'Order update failed. Check PIN and try again.');
+      throw err;
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // ─── WhatsApp Dispatch Messaging Handlers ────────────────────────────────
+  const handleSendAutomatedWhatsApp = async (order: BarcodeOrder) => {
+    if (!order.mobileNumber) {
+      warning('Student ka mobile number uplabdh nahi hai.');
+      return;
+    }
+    setSendingWhatsAppId(order.id);
+    try {
+      const res = await api.post(`/orders/${order.id}/retry-whatsapp`);
+      if (res.data.success) {
+        const { whatsappDelivery } = res.data.data || {};
+        if (whatsappDelivery?.sent) {
+          success(`WhatsApp notification sent to ${order.studentName} (${order.mobileNumber}) via Teleobi!`);
+          setWhatsAppModalOrder(null);
+        } else {
+          warning(`Teleobi webhook: ${whatsappDelivery?.reason || 'Not delivered'}. WhatsApp Web option use karein.`);
+        }
+      }
+    } catch (err: any) {
+      error(err.response?.data?.message || 'WhatsApp notification send nahi ho paya.');
+    } finally {
+      setSendingWhatsAppId(null);
+    }
+  };
+
+  const handleOpenDirectWhatsApp = (order: BarcodeOrder) => {
+    if (!order.mobileNumber) {
+      warning('Student ka mobile number uplabdh nahi hai.');
+      return;
+    }
+    const cleanMobile = order.mobileNumber.replace(/\D/g, '');
+    const phoneWithCountry = cleanMobile.length === 10 ? `91${cleanMobile}` : cleanMobile;
+    const books = order.items.map((i) => i.bookCode).filter(Boolean).join(', ');
+    const trackingLink = order.courierTrackingUrl || 'https://www.dtdc.in/';
+    const text = encodeURIComponent(
+      `नमस्ते ${order.studentName},\n\nआपका FAST स्टडी मटेरियल ऑर्डर डिस्पैच हो गया है!\n\n📦 Order Code: ${order.orderCode || '-'}\n🚚 Courier: ${order.courierName || 'Courier'}\n🔢 Tracking ID: ${order.trackingId || '-'}\n🔗 Tracking Link: ${trackingLink}\n📚 Books: ${books}\n\nधन्यवाद!\nFAST Careers`
+    );
+    window.open(`https://wa.me/${phoneWithCountry}?text=${text}`, '_blank');
+    setWhatsAppModalOrder(null);
   };
 
   // Export Orders to Real Excel File (.xlsx)
@@ -1409,6 +1590,24 @@ export const BarcodeSheetPage: React.FC = () => {
                       <td className="py-2.5 px-3 text-right whitespace-nowrap action-cell">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            onClick={() => setWhatsAppModalOrder(order)}
+                            className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded shadow-2xs transition-colors cursor-pointer"
+                            title="WhatsApp message bhejein / dobara bhejein"
+                          >
+                            <MessageSquare size={12} />
+                            <span>WhatsApp</span>
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleOpenEditModal(order)}
+                              className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                              title="Edit student & order details (PIN Protected)"
+                            >
+                              <Edit2 size={12} />
+                              <span>Edit</span>
+                            </button>
+                          )}
+                          <button
                             onClick={() => openDispatchForOrder(order)}
                             className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded shadow-2xs transition-colors cursor-pointer"
                             title="Scan & verify books for this student"
@@ -1525,25 +1724,47 @@ export const BarcodeSheetPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="no-print flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${
+                <div className="no-print flex items-center justify-between gap-1.5 border-t border-slate-100 pt-2 flex-wrap">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                     order.status === 'COMPLETED'
                       ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-amber-100 text-amber-800'
                   }`}>
                     {order.status === 'COMPLETED' ? 'Completed' : 'Pending'}
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 flex-wrap">
                     <button
+                      type="button"
+                      onClick={() => setWhatsAppModalOrder(order)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded cursor-pointer shadow-2xs transition-colors"
+                      title="WhatsApp message bhejein / dobara bhejein"
+                    >
+                      <MessageSquare size={12} />
+                      <span>WhatsApp</span>
+                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(order)}
+                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 cursor-pointer shadow-2xs transition-colors"
+                        title="Edit student/order details (PIN Protected)"
+                      >
+                        <Edit2 size={12} />
+                        <span>Edit</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
                       onClick={() => openDispatchForOrder(order)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded cursor-pointer shadow-2xs transition-colors"
                     >
                       <Zap size={12} />
                       <span>Dispatch</span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => handlePrintSingleSlip(order)}
-                      className="p-1.5 text-slate-600 hover:bg-slate-100 rounded border border-slate-200"
+                      className="p-1 text-slate-600 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer"
                       aria-label={`Print ${order.studentName} barcode`}
                     >
                       <Printer size={13} />
@@ -1573,6 +1794,344 @@ export const BarcodeSheetPage: React.FC = () => {
           fetchOrders(search);
         }}
       />
+
+      {/* ─── ADMIN EDIT ORDER MODAL (PIN PROTECTED) ─────────────────────────── */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          if (!isSavingEdit) {
+            setIsEditModalOpen(false);
+            setEditingBarcodeOrder(null);
+          }
+        }}
+        title="Edit Student Order Details"
+        subtitle={editingBarcodeOrder ? `Order Code: ${editingBarcodeOrder.orderCode || editingBarcodeOrder.id} • Requires 4-digit Security PIN to save` : ''}
+        maxWidth="4xl"
+      >
+        {editingBarcodeOrder && (
+          <div className="space-y-5 p-1">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2.5 text-xs text-amber-800">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold">Security PIN Protected:</span> Any edits to student info, courier tracking ID, courier partner, or book quantities require entering your 4-digit Security PIN and will be recorded in the Audit Log.
+              </div>
+            </div>
+
+            {/* Basic Student & Order Fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Student Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.studentName}
+                  onChange={(e) => setEditFormData({ ...editFormData, studentName: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. Rahul Sharma"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Mobile Number
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.mobileNumber}
+                  onChange={(e) => setEditFormData({ ...editFormData, mobileNumber: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. 9876543210"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. student@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Courier Tracking ID (AWB)
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.trackingId}
+                  onChange={(e) => setEditFormData({ ...editFormData, trackingId: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 text-sm font-mono uppercase border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. TRACK12345"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Courier Partner Name (कूरियर)
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.courierName}
+                  onChange={(e) => setEditFormData({ ...editFormData, courierName: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. DTDC, Trackon, India Post, Delhivery"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Weight (वजन)
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.weight || ''}
+                  onChange={(e) => setEditFormData({ ...editFormData, weight: e.target.value })}
+                  className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. 1.5 kg, 500g"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Product Code (Combo / Course)
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.productCode}
+                  onChange={(e) => setEditFormData({ ...editFormData, productCode: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 text-sm font-mono uppercase border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  placeholder="e.g. PROD-CA-FINAL"
+                />
+              </div>
+            </div>
+
+            {/* Book Items Section */}
+            <div className="border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-red-600" />
+                  <span>Order Books / Items ({editFormData.items.length})</span>
+                </h4>
+                <div className="flex items-center gap-2">
+                  {editFormData.items.some((it) => (it.dispatchedQuantity || 0) > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditFormData((prev) => ({
+                          ...prev,
+                          items: prev.items.map((it) => ({ ...it, dispatchedQuantity: 0 })),
+                        }));
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg cursor-pointer transition-colors"
+                      title="Reset all book dispatched counts to 0 so the order can be scanned fresh"
+                    >
+                      ↺ Reset Status to Pending (0 Dispatched)
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAddEditItem}
+                    className="px-2.5 py-1 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Book</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {editFormData.items.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center gap-3"
+                  >
+                    <div className="w-36">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Book Code</label>
+                      <input
+                        type="text"
+                        value={item.bookCode}
+                        onChange={(e) => handleEditItemChange(idx, 'bookCode', e.target.value.toUpperCase())}
+                        placeholder="e.g. BK-01"
+                        className="w-full px-2 py-1 text-xs font-mono font-bold uppercase border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+
+                    <div className="flex-1 min-w-[180px]">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Book Title / Name</label>
+                      <input
+                        type="text"
+                        value={item.bookName}
+                        onChange={(e) => handleEditItemChange(idx, 'bookName', e.target.value)}
+                        placeholder="e.g. Advanced Auditing Vol 1"
+                        className="w-full px-2 py-1 text-xs border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
+                        required
+                      />
+                    </div>
+
+                    <div className="w-20">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Req Qty</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.requiredQuantity}
+                        onChange={(e) => handleEditItemChange(idx, 'requiredQuantity', Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-2 py-1 text-xs font-semibold text-center border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500"
+                      />
+                    </div>
+
+                    <div className="w-20">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase">Disp Qty</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={item.dispatchedQuantity || 0}
+                        onChange={(e) => handleEditItemChange(idx, 'dispatchedQuantity', Math.max(0, parseInt(e.target.value) || 0))}
+                        className={`w-full px-2 py-1 text-xs font-semibold text-center border rounded bg-white focus:outline-none focus:ring-1 ${
+                          (item.dispatchedQuantity || 0) >= item.requiredQuantity
+                            ? 'border-emerald-300 text-emerald-700 font-bold bg-emerald-50/50'
+                            : 'border-slate-300 text-slate-700'
+                        }`}
+                        title="Dispatched quantity. Change to 0 to mark Pending again."
+                      />
+                    </div>
+
+                    <div className="pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEditItem(idx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Remove this book"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="border-t border-slate-200 pt-4 flex items-center justify-end gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingBarcodeOrder(null);
+                }}
+                disabled={isSavingEdit}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleRequestSaveEdit}
+                isLoading={isSavingEdit}
+                icon={<KeyRound className="w-4 h-4" />}
+              >
+                {isSavingEdit ? 'Saving...' : 'Authorize & Save Changes'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ─── Security PIN Verification Modal ─── */}
+      <SecurityPinModal
+        isOpen={isPinModalOpen}
+        onClose={() => setIsPinModalOpen(false)}
+        title="Authorize Order Modification"
+        description={`Enter the 4-digit Admin Security PIN to confirm edits for ${editingBarcodeOrder?.studentName || 'Student'} (${editingBarcodeOrder?.trackingId || editingBarcodeOrder?.orderCode || 'Order'}).`}
+        actionLabel="Verify PIN & Save Order"
+        onSuccess={handleAuthorizeAndSaveEdit}
+      />
+
+      {/* ─── WHATSAPP DISPATCH MODAL ────────────────────────────────────────── */}
+      <Modal
+        isOpen={Boolean(whatsAppModalOrder)}
+        onClose={() => setWhatsAppModalOrder(null)}
+        title="Send WhatsApp Dispatch Message"
+        subtitle={whatsAppModalOrder ? `${whatsAppModalOrder.studentName} • ${whatsAppModalOrder.mobileNumber || 'No Phone'}` : ''}
+        maxWidth="lg"
+      >
+        {whatsAppModalOrder && (
+          <div className="space-y-4 p-1">
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                  <MessageSquare size={16} className="text-emerald-600" />
+                  <span>Student Dispatch Details</span>
+                </span>
+                <span className="font-mono font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
+                  {whatsAppModalOrder.orderCode || '-'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-slate-700 pt-1">
+                <div>
+                  <span className="text-slate-500 font-semibold block text-[10px]">STUDENT:</span>
+                  <span className="font-bold text-slate-900">{whatsAppModalOrder.studentName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-semibold block text-[10px]">PHONE:</span>
+                  <span className="font-mono font-bold text-emerald-800">{whatsAppModalOrder.mobileNumber || 'Not available'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-semibold block text-[10px]">TRACKING ID:</span>
+                  <span className="font-mono font-bold text-red-700">{whatsAppModalOrder.trackingId || '-'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 font-semibold block text-[10px]">COURIER:</span>
+                  <span className="font-bold text-sky-800">{whatsAppModalOrder.courierName || 'Courier'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Message Preview Box */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs space-y-1">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Message Preview:</span>
+              <p className="font-sans text-slate-800 text-[11.5px] leading-relaxed whitespace-pre-line bg-white p-2.5 rounded-lg border border-slate-200">
+                {`नमस्ते ${whatsAppModalOrder.studentName},\n\nआपका FAST स्टडी मटेरियल ऑर्डर डिस्पैच हो गया है!\n\n📦 Order Code: ${whatsAppModalOrder.orderCode || '-'}\n🚚 Courier: ${whatsAppModalOrder.courierName || 'Courier'}\n🔢 Tracking ID: ${whatsAppModalOrder.trackingId || '-'}\n🔗 Tracking Link: ${whatsAppModalOrder.courierTrackingUrl || 'https://www.dtdc.in/'}\n📚 Books: ${whatsAppModalOrder.items.map((i) => i.bookCode).filter(Boolean).join(', ')}\n\nधन्यवाद!\nFAST Careers`}
+              </p>
+            </div>
+
+            {/* Two WhatsApp Sending Options */}
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleSendAutomatedWhatsApp(whatsAppModalOrder)}
+                disabled={sendingWhatsAppId === whatsAppModalOrder.id || !whatsAppModalOrder.mobileNumber}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Zap size={15} />
+                <span>{sendingWhatsAppId === whatsAppModalOrder.id ? 'Sending via Teleobi...' : '1. Send via Automated Webhook (Teleobi)'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenDirectWhatsApp(whatsAppModalOrder)}
+                disabled={!whatsAppModalOrder.mobileNumber}
+                className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              >
+                <MessageSquare size={15} />
+                <span>2. Open WhatsApp Web / App (Direct Chat)</span>
+              </button>
+            </div>
+
+            <div className="border-t border-slate-200 pt-3 flex justify-end">
+              <Button variant="secondary" size="sm" onClick={() => setWhatsAppModalOrder(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

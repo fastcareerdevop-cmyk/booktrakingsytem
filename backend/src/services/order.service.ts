@@ -294,14 +294,6 @@ export async function retryOrderWhatsApp(orderId: string, actorUserId: string) {
     throw { statusCode: 404, message: 'Order not found', code: 'ORDER_NOT_FOUND' };
   }
 
-  if (computeOrderStatus(order.items) !== 'COMPLETED') {
-    throw {
-      statusCode: 400,
-      message: 'WhatsApp dispatch notification can only be sent after all order items are dispatched.',
-      code: 'ORDER_NOT_COMPLETED',
-    };
-  }
-
   // Older versions could mark a dev fallback as sent. Clear that unverifiable
   // status before an explicit retry so it cannot suppress the webhook attempt.
   order.whatsappSentAt = null;
@@ -655,6 +647,7 @@ export interface AdminUpdateOrderInput {
   mobileNumber?: string;
   email?: string;
   trackingId?: string;
+  courierName?: string;
   weight?: string;
   productCode?: string;
   items?: {
@@ -686,6 +679,7 @@ export async function adminUpdateOrder(
     mobileNumber: order.mobileNumber,
     email: order.email,
     trackingId: order.trackingId,
+    courierName: order.courierName,
     productCode: order.productCode,
     itemsCount: order.items.length,
   };
@@ -694,6 +688,7 @@ export async function adminUpdateOrder(
   if (data.mobileNumber !== undefined) order.mobileNumber = data.mobileNumber.trim();
   if (data.email !== undefined) order.email = data.email ? data.email.trim().toLowerCase() : null;
   if (data.trackingId !== undefined) order.trackingId = data.trackingId.trim().toUpperCase();
+  if (data.courierName !== undefined) order.courierName = data.courierName.trim();
   if (data.weight !== undefined) order.weight = data.weight.trim();
   if (data.productCode !== undefined) order.productCode = data.productCode.trim().toUpperCase();
 
