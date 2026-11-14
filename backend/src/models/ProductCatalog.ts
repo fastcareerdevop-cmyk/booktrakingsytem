@@ -5,6 +5,7 @@ export interface IProductCatalog extends Document {
   productName: string;
   books: string[];
   description?: string;
+  isActive?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +32,11 @@ const ProductCatalogSchema = new Schema<IProductCatalog>(
       type: String,
       trim: true,
       default: '',
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
     },
   },
   {

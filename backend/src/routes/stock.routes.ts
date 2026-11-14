@@ -43,6 +43,8 @@ router.post('/barcode-catalog/product/bulk-excel', requireRole('ADMIN'), upload.
 router.get('/barcode-catalog/product/template', requireRole('ADMIN', 'EMPLOYEE'), stockController.downloadProductTemplateExcel);
 router.put('/product/:identifier', requireRole('ADMIN', 'EMPLOYEE'), stockController.updateProductDetails);
 router.delete('/product/:identifier', requireRole('ADMIN', 'EMPLOYEE'), stockController.deleteProduct);
+router.patch('/product/:identifier/toggle-status', requireRole('ADMIN'), stockController.toggleProductActiveStatus);
+router.patch('/book/:identifier/toggle-status', requireRole('ADMIN'), stockController.toggleBookActiveStatus);
 
 // Pending Book Stock Routes (पेंडिंग बुक स्टॉक)
 router.get('/pending', requireRole('ADMIN', 'EMPLOYEE'), stockController.getPendingBooks);

@@ -1364,6 +1364,7 @@ export async function receivePendingBook(userId: string, id: string, input: { re
       totalInward: b.totalInward,
       totalDispatched: b.totalDispatched,
       pendingQuantity: pendingMap.get(b.bookCode.toUpperCase()) || 0,
+      isActive: b.isActive !== false,
       type: 'BOOK' as const,
     }));
 
@@ -1492,6 +1493,7 @@ export async function receivePendingBook(userId: string, id: string, input: { re
         books,
         totalBooksCount: books.length,
         totalOrdersCount: orderCountMap.get(productKey(c, name)) || 0,
+        isActive: p.isActive !== false,
         type: 'PRODUCT' as const,
       };
     });
@@ -1615,6 +1617,95 @@ export async function receivePendingBook(userId: string, id: string, input: { re
         productCode: newCode,
         productName: newName,
         books: newBooks,
+      },
+    };
+  }
+
+  /**
+   * Toggle Product Active / Inactive Status
+   */
+  export async function toggleProductActiveStatus(userId: string, identifier: string) {
+    const cleanId = identifier.trim();
+    let product = null;
+    if (mongoose.Types.ObjectId.isValid(cleanId)) {
+      product = await ProductCatalog.findById(cleanId);
+    }
+    if (!product) {
+      product = await ProductCatalog.findOne({ productCode: cleanId.toUpperCase() });
+    }
+    if (!product) {
+      throw { statusCode: 404, message: 'Product nahi mila', code: 'PRODUCT_NOT_FOUND' };
+    }
+
+    const newActiveState = product.isActive === false ? true : false;
+    product.isActive = newActiveState;
+    await product.save();
+
+    await logAudit({
+      actorUserId: userId,
+      action: newActiveState ? 'PRODUCT_ACTIVATED' : 'PRODUCT_DEACTIVATED',
+      entityType: 'ProductCatalog',
+      entityId: product._id.toString(),
+      metadata: {
+        productCode: product.productCode,
+        productName: product.productName,
+        isActive: newActiveState,
+      },
+    });
+
+    return {
+      message: `Product "${product.productName}" (${product.productCode}) ab ${newActiveState ? 'ACTIVE (सक्रिय)' : 'INACTIVE (निष्क्रिय)'} hai.`,
+      isActive: newActiveState,
+      product: {
+        id: product._id.toString(),
+        productCode: product.productCode,
+        productName: product.productName,
+        isActive: newActiveState,
+      },
+    };
+  }
+
+  /**
+   * Toggle Book Barcode Active / Inactive Status
+   */
+  export async function toggleBookActiveStatus(userId: string, identifier: string) {
+    const cleanId = identifier.trim();
+    let book = null;
+    if (mongoose.Types.ObjectId.isValid(cleanId)) {
+      book = await BookStock.findById(cleanId);
+    }
+    if (!book) {
+      const cleanCode = normalizeCode(cleanId);
+      book = await BookStock.findOne({ bookCode: cleanCode });
+    }
+    if (!book) {
+      throw { statusCode: 404, message: `Book "${identifier}" nahi mili`, code: 'BOOK_NOT_FOUND' };
+    }
+
+    const newActiveState = book.isActive === false ? true : false;
+    book.isActive = newActiveState;
+    await book.save();
+
+    await logAudit({
+      actorUserId: userId,
+      action: newActiveState ? 'BOOK_ACTIVATED' : 'BOOK_DEACTIVATED',
+      entityType: 'BookStock',
+      entityId: book._id.toString(),
+      metadata: {
+        bookCode: book.bookCode,
+        bookName: book.bookName,
+        isActive: newActiveState,
+      },
+    });
+
+    return {
+      message: `Book "${book.bookName}" (${book.bookCode}) ab ${newActiveState ? 'ACTIVE (सक्रिय)' : 'INACTIVE (निष्क्रिय)'} hai.`,
+      isActive: newActiveState,
+      book: {
+        id: book._id.toString(),
+        bookCode: book.bookCode,
+        bookName: book.bookName,
+        isActive: newActiveState,
       },
     };
   }

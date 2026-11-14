@@ -23,6 +23,7 @@ import {
   Plus,
   FileSpreadsheet,
   Upload,
+  Power,
 } from 'lucide-react';
 import { ProductExcelUploadModal } from '../components/stock/ProductExcelUploadModal';
 import { BarcodeDisplay } from '../components/common/BarcodeDisplay';
@@ -39,6 +40,7 @@ interface BookItem {
   totalInward: number;
   totalDispatched: number;
   pendingQuantity: number;
+  isActive?: boolean;
   type: 'BOOK';
 }
 
@@ -49,6 +51,7 @@ interface ProductItem {
   books: string[];
   totalBooksCount: number;
   totalOrdersCount: number;
+  isActive?: boolean;
   type: 'PRODUCT';
 }
 
@@ -63,7 +66,9 @@ export const BarcodeCatalogPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'ALL' | 'BOOKS' | 'PRODUCTS'>('ALL');
   const [search, setSearch] = useState('');
   const [stockFilter, setStockFilter] = useState<'ALL' | 'IN_STOCK' | 'OUT_OF_STOCK'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   const [viewMode, setViewMode] = useState<'GRID' | 'TABLE'>('GRID');
+  const [togglingBarcode, setTogglingBarcode] = useState<string | null>(null);
 
   // Custom Barcode Tester
   const [testerInput, setTesterInput] = useState('');
@@ -294,6 +299,62 @@ export const BarcodeCatalogPage: React.FC = () => {
     }
   };
 
+  const handleToggleProductStatus = async (product: ProductItem) => {
+    if (!isAdmin) {
+      error('Kewal Admin status change kar sakta hai');
+      return;
+    }
+    const isCurrentlyActive = product.isActive !== false;
+    const actionText = isCurrentlyActive ? 'Inactive (निष्क्रिय)' : 'Active (सक्रिय)';
+    if (!window.confirm(
+      `Kya aap "${product.productName}" (${product.productCode}) ko ${actionText} karna chahte hain? ${
+        isCurrentlyActive
+          ? 'Inactive hone ke baad is product ka naya order nahi aayega aur Excel import block ho jayega.'
+          : 'Active hone ke baad iska order liya ja sakega.'
+      }`
+    )) return;
+
+    const key = `PRODUCT:${product.id}`;
+    setTogglingBarcode(key);
+    try {
+      const res = await api.patch(`/stock/product/${encodeURIComponent(product.id)}/toggle-status`);
+      success(res.data?.message || `Product ab ${actionText} hai.`);
+      await fetchCatalog();
+    } catch (err: any) {
+      error(err.response?.data?.message || 'Product status change nahi ho paya');
+    } finally {
+      setTogglingBarcode(null);
+    }
+  };
+
+  const handleToggleBookStatus = async (book: BookItem) => {
+    if (!isAdmin) {
+      error('Kewal Admin status change kar sakta hai');
+      return;
+    }
+    const isCurrentlyActive = book.isActive !== false;
+    const actionText = isCurrentlyActive ? 'Inactive (निष्क्रिय)' : 'Active (सक्रिय)';
+    if (!window.confirm(
+      `Kya aap "${book.bookName}" (${book.bookCode}) ko ${actionText} karna chahte hain? ${
+        isCurrentlyActive
+          ? 'Inactive hone ke baad is book ka naya order nahi aayega aur Excel import block ho jayega.'
+          : 'Active hone ke baad iska order liya ja sakega.'
+      }`
+    )) return;
+
+    const key = `BOOK:${book.bookCode}`;
+    setTogglingBarcode(key);
+    try {
+      const res = await api.patch(`/stock/book/${encodeURIComponent(book.bookCode)}/toggle-status`);
+      success(res.data?.message || `Book ab ${actionText} hai.`);
+      await fetchCatalog();
+    } catch (err: any) {
+      error(err.response?.data?.message || 'Book status change nahi ho paya');
+    } finally {
+      setTogglingBarcode(null);
+    }
+  };
+
   // Filtered Books
   const filteredBooks = books.filter((b) => {
     const q = search.trim().toLowerCase();
@@ -304,6 +365,8 @@ export const BarcodeCatalogPage: React.FC = () => {
       (b.productCode && b.productCode.toLowerCase().includes(q));
 
     if (!matchesSearch) return false;
+    if (statusFilter === 'ACTIVE' && b.isActive === false) return false;
+    if (statusFilter === 'INACTIVE' && b.isActive !== false) return false;
     if (stockFilter === 'IN_STOCK') return b.availableQuantity > 0;
     if (stockFilter === 'OUT_OF_STOCK') return b.availableQuantity <= 0;
     return true;
@@ -312,6 +375,8 @@ export const BarcodeCatalogPage: React.FC = () => {
   // Filtered Products
   const filteredProducts = products.filter((p) => {
     const q = search.trim().toLowerCase();
+    if (statusFilter === 'ACTIVE' && p.isActive === false) return false;
+    if (statusFilter === 'INACTIVE' && p.isActive !== false) return false;
     if (!q) return true;
     return (
       p.productCode.toLowerCase().includes(q) ||
@@ -1137,6 +1202,18 @@ export const BarcodeCatalogPage: React.FC = () => {
             </select>
           )}
 
+          {/* Active / Inactive filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white font-medium text-slate-700 cursor-pointer focus:outline-none"
+            title="Filter by Active or Inactive status"
+          >
+            <option value="ALL">All Status (सभी)</option>
+            <option value="ACTIVE">Active Only (सक्रिय)</option>
+            <option value="INACTIVE">Inactive Only (निष्क्रिय)</option>
+          </select>
+
           {/* View Mode Toggle */}
           <div className="flex items-center bg-slate-100 p-0.5 rounded-lg text-xs">
             <button
@@ -1197,16 +1274,31 @@ export const BarcodeCatalogPage: React.FC = () => {
                   {filteredProducts.map((p) => (
                     <div
                       key={p.id}
-                      className="p-3.5 rounded-xl bg-white border border-slate-200 hover:border-indigo-300 transition-all shadow-2xs hover:shadow-sm flex flex-col justify-between space-y-2.5"
+                      className={`p-3.5 rounded-xl border transition-all shadow-2xs hover:shadow-sm flex flex-col justify-between space-y-2.5 ${
+                        p.isActive === false
+                          ? 'bg-slate-50/90 border-slate-300 opacity-80'
+                          : 'bg-white border-slate-200 hover:border-indigo-300'
+                      }`}
                     >
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono font-black text-xs px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <span className={`font-mono font-black text-xs px-2 py-0.5 rounded border ${
+                            p.isActive === false
+                              ? 'bg-slate-100 text-slate-500 border-slate-300 line-through'
+                              : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                          }`}>
                             {p.productCode}
                           </span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                            {p.totalBooksCount} Books
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {p.isActive === false && (
+                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                                INACTIVE (बंद)
+                              </span>
+                            )}
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              {p.totalBooksCount} Books
+                            </span>
+                          </div>
                         </div>
 
                         {/* Barcode SVG */}
@@ -1267,6 +1359,25 @@ export const BarcodeCatalogPage: React.FC = () => {
                           >
                             <Trash2 size={11} />
                             <span>{deletingBarcode === `PRODUCT:${p.id}` ? 'Deleting...' : 'Delete'}</span>
+                          </button>
+                          <button
+                            onClick={() => handleToggleProductStatus(p)}
+                            disabled={togglingBarcode === `PRODUCT:${p.id}`}
+                            className={`px-2 py-1 font-bold rounded flex items-center gap-1 cursor-pointer transition-colors text-[11px] disabled:opacity-50 ${
+                              p.isActive === false
+                                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                            }`}
+                            title={p.isActive === false ? 'Activate Product (पुनः चालू करें)' : 'Mark Inactive (ऑर्डर व यूज़ बंद करें)'}
+                          >
+                            <Power size={11} />
+                            <span>
+                              {togglingBarcode === `PRODUCT:${p.id}`
+                                ? 'Saving...'
+                                : p.isActive === false
+                                ? 'Active'
+                                : 'Inactive'}
+                            </span>
                           </button>
                           <button
                             onClick={() => handlePrintSingleSticker(p.productCode, p.productName)}
@@ -1339,6 +1450,25 @@ export const BarcodeCatalogPage: React.FC = () => {
                                 <span>{deletingBarcode === `PRODUCT:${p.id}` ? 'Deleting...' : 'Delete'}</span>
                               </button>
                               <button
+                                onClick={() => handleToggleProductStatus(p)}
+                                disabled={togglingBarcode === `PRODUCT:${p.id}`}
+                                className={`px-2.5 py-1 font-bold rounded inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                                  p.isActive === false
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                                }`}
+                                title={p.isActive === false ? 'Activate Product' : 'Mark Inactive'}
+                              >
+                                <Power size={12} />
+                                <span>
+                                  {togglingBarcode === `PRODUCT:${p.id}`
+                                    ? 'Saving...'
+                                    : p.isActive === false
+                                    ? 'Active'
+                                    : 'Inactive'}
+                                </span>
+                              </button>
+                              <button
                                 onClick={() => handlePrintSingleSticker(p.productCode, p.productName)}
                                 className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded inline-flex items-center gap-1 cursor-pointer"
                               >
@@ -1379,22 +1509,37 @@ export const BarcodeCatalogPage: React.FC = () => {
                     return (
                       <div
                         key={b.bookCode}
-                        className="p-3.5 rounded-xl bg-white border border-slate-200 hover:border-red-300 transition-all shadow-2xs hover:shadow-sm flex flex-col justify-between space-y-2.5"
+                        className={`p-3.5 rounded-xl border transition-all shadow-2xs hover:shadow-sm flex flex-col justify-between space-y-2.5 ${
+                          b.isActive === false
+                            ? 'bg-slate-50/90 border-slate-300 opacity-80'
+                            : 'bg-white border-slate-200 hover:border-red-300'
+                        }`}
                       >
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="font-mono font-black text-xs px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                            <span className={`font-mono font-black text-xs px-2 py-0.5 rounded border ${
+                              b.isActive === false
+                                ? 'bg-slate-100 text-slate-500 border-slate-300 line-through'
+                                : 'bg-red-50 text-red-700 border-red-200'
+                            }`}>
                               {b.bookCode}
                             </span>
-                            <span
-                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
-                                isInStock
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                  : 'bg-rose-50 text-rose-800 border-rose-200'
-                              }`}
-                            >
-                              {isInStock ? `${b.availableQuantity} in stock` : b.availableQuantity < 0 ? `${b.availableQuantity} deficit` : '0 stock'}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {b.isActive === false && (
+                                <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-300">
+                                  INACTIVE (बंद)
+                                </span>
+                              )}
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
+                                  isInStock
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                                }`}
+                              >
+                                {isInStock ? `${b.availableQuantity} in stock` : b.availableQuantity < 0 ? `${b.availableQuantity} deficit` : '0 stock'}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Barcode SVG */}
@@ -1450,6 +1595,25 @@ export const BarcodeCatalogPage: React.FC = () => {
                             >
                               <Trash2 size={11} />
                               <span>{deletingBarcode === `BOOK:${b.bookCode}` ? 'Deleting...' : 'Delete'}</span>
+                            </button>
+                            <button
+                              onClick={() => handleToggleBookStatus(b)}
+                              disabled={togglingBarcode === `BOOK:${b.bookCode}`}
+                              className={`px-2 py-1 font-bold rounded flex items-center gap-1 cursor-pointer transition-colors text-[11px] disabled:opacity-50 ${
+                                b.isActive === false
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                              }`}
+                              title={b.isActive === false ? 'Activate Book (पुनः चालू करें)' : 'Mark Inactive (ऑर्डर व यूज़ बंद करें)'}
+                            >
+                              <Power size={11} />
+                              <span>
+                                {togglingBarcode === `BOOK:${b.bookCode}`
+                                  ? 'Saving...'
+                                  : b.isActive === false
+                                  ? 'Active'
+                                  : 'Inactive'}
+                              </span>
                             </button>
                             <button
                               onClick={() => handlePrintSingleSticker(b.bookCode, b.bookName)}
@@ -1524,6 +1688,25 @@ export const BarcodeCatalogPage: React.FC = () => {
                               >
                                 <Trash2 size={12} />
                                 <span>{deletingBarcode === `BOOK:${b.bookCode}` ? 'Deleting...' : 'Delete'}</span>
+                              </button>
+                              <button
+                                onClick={() => handleToggleBookStatus(b)}
+                                disabled={togglingBarcode === `BOOK:${b.bookCode}`}
+                                className={`px-2.5 py-1 font-bold rounded inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                                  b.isActive === false
+                                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+                                }`}
+                                title={b.isActive === false ? 'Activate Book' : 'Mark Inactive'}
+                              >
+                                <Power size={12} />
+                                <span>
+                                  {togglingBarcode === `BOOK:${b.bookCode}`
+                                    ? 'Saving...'
+                                    : b.isActive === false
+                                    ? 'Active'
+                                    : 'Inactive'}
+                                </span>
                               </button>
                               <button
                                 onClick={() => handlePrintSingleSticker(b.bookCode, b.bookName)}

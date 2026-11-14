@@ -255,6 +255,24 @@ export async function deleteProduct(req: AuthenticatedRequest, res: Response, ne
   }
 }
 
+export async function toggleProductActiveStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await stockService.toggleProductActiveStatus(req.user!.id, req.params.identifier);
+    return successResponse(res, result.message, result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function toggleBookActiveStatus(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const result = await stockService.toggleBookActiveStatus(req.user!.id, req.params.identifier);
+    return successResponse(res, result.message, result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function getBookStockHistory(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
     const result = await stockService.getBookStockHistory(req.params.identifier);

@@ -9,6 +9,7 @@ export interface IBookStock extends Document {
   availableQuantity: number; // Current live warehouse stock (totalInward - totalDispatched)
   lowStockThreshold: number; // Low stock warning threshold (default: 10)
   lastRestockedAt: Date;     // Date and time when stock was last inwarded
+  isActive?: boolean;        // Active flag for barcode catalog and ordering
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +59,11 @@ const BookStockSchema = new Schema<IBookStock>(
     lastRestockedAt: {
       type: Date,
       default: Date.now,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
     },
   },
   {

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import ExcelJS from 'exceljs';
 import mongoose from 'mongoose';
-import { ImportBatch, Order, BookStock } from '../models';
+import { ImportBatch, Order, BookStock, ProductCatalog } from '../models';
 import { normalizeBookCode, normalizeTrackingId, normalizeMobileNumber, normalizeEmail, resolveCourierTracking } from '../utils/normalize';
 import { logAudit } from '../utils/audit';
 import { sendOrderEmail } from './email.service';
@@ -331,15 +331,23 @@ export async function parseAndPreviewExcel(
     };
   }
 
-  // 2. Fetch warehouse stock to auto-resolve book names
+  // 2. Fetch warehouse stock and inactive sets to block inactive items from ordering
   const stockMap = new Map<string, string>();
+  const inactiveBooks = new Set<string>();
+  const inactiveProducts = new Set<string>();
   if (mongoose.connection.readyState === 1) {
     try {
-      const stockItems = await BookStock.find({}).select('bookCode bookName').lean();
+      const stockItems = await BookStock.find({}).select('bookCode bookName isActive').lean();
       for (const s of stockItems) {
-        if (s.bookCode && s.bookName) {
-          stockMap.set(normalizeBookCode(s.bookCode), s.bookName.trim());
+        if (s.bookCode) {
+          const c = normalizeBookCode(s.bookCode);
+          if (s.bookName) stockMap.set(c, s.bookName.trim());
+          if (s.isActive === false) inactiveBooks.add(c);
         }
+      }
+      const inactProds = await ProductCatalog.find({ isActive: false }).select('productCode').lean();
+      for (const p of inactProds) {
+        if (p.productCode) inactiveProducts.add(normalizeBookCode(p.productCode));
       }
     } catch (e) {
       // If DB has delay, will rely on knownBookTitles
@@ -558,10 +566,19 @@ export async function parseAndPreviewExcel(
           bookCode: cleanBookCode,
           bookName: resolvedBookName,
           quantity: Number.isInteger(quantity) && quantity > 0 ? quantity : 1,
-          errors: [...rowErrors],
+          errors: (() => {
+            const errs = [...rowErrors];
+            if (cleanProductCode && inactiveProducts.has(cleanProductCode)) {
+              errs.push(`Product '${cleanProductCode}' INACTIVE (निष्क्रिय) hai. Inactive product ka order accept nahi hoga.`);
+            }
+            if (cleanBookCode && inactiveBooks.has(cleanBookCode)) {
+              errs.push(`Book '${cleanBookCode}' INACTIVE (निष्क्रिय) hai. Inactive book ka order accept nahi hoga.`);
+            }
+            return errs;
+          })(),
         };
 
-        if (rowErrors.length > 0) {
+        if (rowItem.errors.length > 0) {
           invalidRows.push(rowItem);
         } else {
           validRows.push(rowItem);
