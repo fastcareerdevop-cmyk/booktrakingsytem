@@ -20,6 +20,8 @@ export interface IOrder extends Document {
   whatsappSentAt: Date | null;
   trackingId: string;
   weight?: string;
+  city?: string;
+  address?: string;
   courierName?: string;
   courierTrackingUrl?: string;
   importBatchId: mongoose.Types.ObjectId;
@@ -60,6 +62,8 @@ const OrderSchema = new Schema<IOrder>(
     whatsappSentAt: { type: Date, default: null },
     trackingId: { type: String, required: true, trim: true, uppercase: true, index: true },
     weight: { type: String, trim: true, default: '' },
+    city: { type: String, trim: true, default: '' },
+    address: { type: String, trim: true, default: '' },
     courierName: { type: String, trim: true, default: '' },
     courierTrackingUrl: { type: String, trim: true, default: '' },
     importBatchId: { type: Schema.Types.ObjectId, ref: 'ImportBatch', required: true, index: true },

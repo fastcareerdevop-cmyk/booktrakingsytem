@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
-import { Order, DispatchLog, ImportBatch, VerificationAttempt } from '../models';
+import { Order, DispatchLog, ImportBatch, VerificationAttempt, BookStock } from '../models';
 import { logAudit } from '../utils/audit';
 import { parseDateFilter } from '../utils/date';
 import { sendOrderEmail } from './email.service';
 import { sendOrderWhatsAppMessage } from './whatsapp.service';
 import { verifySecurityPin } from './security.service';
-import { resolveCourierTracking } from '../utils/normalize';
+import { resolveCourierTracking, normalizeBookCode } from '../utils/normalize';
 
 export type ItemStatus = 'PENDING' | 'PARTIALLY_DISPATCHED' | 'COMPLETED';
 export type OrderStatus = 'PENDING' | 'PARTIALLY_DISPATCHED' | 'COMPLETED';
@@ -121,8 +121,10 @@ export async function listOrders(params: ListOrdersParams) {
       whatsappSentAt: order.whatsappSentAt,
       trackingId: order.trackingId,
       weight: order.weight || '',
-      courierName: order.courierName || '',
-      courierTrackingUrl: order.courierTrackingUrl || '',
+      city: order.city || '',
+      address: order.address || '',
+      courierName: order.courierName || resolveCourierTracking(order.courierName, order.courierTrackingUrl, order.trackingId).courierName,
+      courierTrackingUrl: order.courierTrackingUrl || resolveCourierTracking(order.courierName, order.courierTrackingUrl, order.trackingId).courierTrackingUrl,
       importBatchId: order.importBatchId?._id?.toString() || order.importBatchId?.toString(),
       importBatch: order.importBatchId && typeof order.importBatchId === 'object'
         ? {
@@ -412,8 +414,10 @@ export async function getOrderById(orderId: string) {
     whatsappSentAt: order.whatsappSentAt,
     trackingId: order.trackingId,
     weight: order.weight || '',
-    courierName: order.courierName || '',
-    courierTrackingUrl: order.courierTrackingUrl || '',
+    city: order.city || '',
+    address: order.address || '',
+    courierName: order.courierName || resolveCourierTracking(order.courierName, order.courierTrackingUrl, order.trackingId).courierName,
+    courierTrackingUrl: order.courierTrackingUrl || resolveCourierTracking(order.courierName, order.courierTrackingUrl, order.trackingId).courierTrackingUrl,
     importBatchId: order.importBatchId?._id?.toString() || order.importBatchId?.toString(),
     importBatch: order.importBatchId,
     createdAt: order.createdAt,
@@ -485,11 +489,34 @@ export async function getBarcodeSheetData(params: {
   batchId?: string;
   search?: string;
   courier?: string;
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
 }) {
   const query: any = {};
   if (params.batchId) {
     const mongoose = require('mongoose');
     query.importBatchId = new mongoose.Types.ObjectId(params.batchId);
+  }
+  if (params.date) {
+    const start = new Date(params.date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(params.date);
+    end.setHours(23, 59, 59, 999);
+    query.createdAt = { $gte: start, $lte: end };
+  } else if (params.startDate || params.endDate) {
+    query.createdAt = {};
+    if (params.startDate) {
+      const s = new Date(params.startDate);
+      s.setHours(0, 0, 0, 0);
+      query.createdAt.$gte = s;
+    }
+    if (params.endDate) {
+      const e = new Date(params.endDate);
+      e.setHours(23, 59, 59, 999);
+      query.createdAt.$lte = e;
+    }
   }
   if (params.courier && params.courier !== 'ALL') {
     const courierParam = params.courier.trim();
@@ -533,7 +560,7 @@ export async function getBarcodeSheetData(params: {
   }
 
   const orders = await Order.find(query)
-    .select('orderCode productCode studentName mobileNumber email trackingId weight courierName courierTrackingUrl items createdAt')
+    .select('orderCode productCode studentName mobileNumber email trackingId weight city address courierName courierTrackingUrl items createdAt')
     .sort({ orderCode: 1 });
 
   return orders.map((order: any) => {
@@ -570,6 +597,8 @@ export async function getBarcodeSheetData(params: {
       email: order.email,
       trackingId: order.trackingId,
       weight: order.weight || '',
+      city: order.city || '',
+      address: order.address || '',
       courierName,
       courierTrackingUrl,
       createdAt: order.createdAt,
@@ -721,6 +750,31 @@ export async function adminUpdateOrder(
   if (data.productCode !== undefined) order.productCode = data.productCode.trim().toUpperCase();
 
   if (Array.isArray(data.items) && data.items.length > 0) {
+    // If dispatched quantity changed (e.g. reset to 0 or modified), sync BookStock
+    for (const newItem of data.items) {
+      const existingItem = order.items.find(
+        (it) => (newItem._id && it._id.toString() === newItem._id.toString()) || it.bookCode === newItem.bookCode
+      );
+      if (existingItem) {
+        const newDispatched = Math.max(0, Number(newItem.dispatchedQuantity) || 0);
+        const oldDispatched = existingItem.dispatchedQuantity || 0;
+        const diff = newDispatched - oldDispatched;
+        if (diff !== 0) {
+          const cleanCode = normalizeBookCode(existingItem.bookCode);
+          // diff < 0 means items were returned/cancelled -> add back to warehouse stock!
+          await BookStock.findOneAndUpdate(
+            { bookCode: cleanCode },
+            {
+              $inc: {
+                availableQuantity: -diff,
+                totalDispatched: diff,
+              },
+            }
+          );
+        }
+      }
+    }
+
     order.items = data.items.map((it) => ({
       _id: it._id ? new mongoose.Types.ObjectId(it._id) : new mongoose.Types.ObjectId(),
       productCode: (it.productCode || order.productCode || '').trim().toUpperCase(),
@@ -754,4 +808,65 @@ export async function adminUpdateOrder(
   });
 
   return getOrderById(order._id.toString());
+}
+
+export async function cancelOrderDispatch(orderId: string, actorUserId: string) {
+  const order = await Order.findById(orderId);
+  if (!order) {
+    throw { statusCode: 404, message: 'Order nahi mila', code: 'ORDER_NOT_FOUND' };
+  }
+
+  let totalRestored = 0;
+  const restoredItems: { bookCode: string; restoredQuantity: number }[] = [];
+
+  for (const item of order.items) {
+    const qty = item.dispatchedQuantity || 0;
+    if (qty > 0) {
+      const cleanCode = normalizeBookCode(item.bookCode);
+      // Restore physical stock to warehouse
+      await BookStock.findOneAndUpdate(
+        { bookCode: cleanCode },
+        {
+          $inc: {
+            availableQuantity: qty,
+            totalDispatched: -qty,
+          },
+        }
+      );
+      item.dispatchedQuantity = 0;
+      totalRestored += qty;
+      restoredItems.push({ bookCode: cleanCode, restoredQuantity: qty });
+    }
+  }
+
+  // Cancel logs
+  await DispatchLog.updateMany(
+    { orderId: order._id },
+    { $set: { action: 'CANCELLED_AND_RESTOCKED' } }
+  );
+
+  order.emailSentAt = null;
+  order.whatsappSentAt = null;
+  await order.save();
+
+  await logAudit({
+    actorUserId,
+    action: 'ORDER_DISPATCH_CANCELLED_STOCK_RESTORED',
+    entityType: 'Order',
+    entityId: order._id.toString(),
+    metadata: {
+      orderCode: order.orderCode,
+      studentName: order.studentName,
+      totalRestored,
+      restoredItems,
+    },
+  });
+
+  return {
+    orderId: order._id.toString(),
+    totalRestored,
+    restoredItems,
+    order: await getOrderById(order._id.toString()),
+    message: `Order dispatch cancel ho gaya hai aur ${totalRestored} books warehouse stock me wapas add kar di gayi hain.`,
+  };
 }

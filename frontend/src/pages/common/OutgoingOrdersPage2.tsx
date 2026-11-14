@@ -141,7 +141,7 @@ export const OutgoingOrdersPage2: React.FC = () => {
   const [trackingMatchStatus, setTrackingMatchStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
   const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
   const trackingInputRef = useRef<HTMLInputElement>(null);
-  const [matchCountdown, setMatchCountdown] = useState(5);
+  const [matchCountdown, setMatchCountdown] = useState(3);
   const matchTimerRef = useRef<any>(null);
   const recentlyCompletedCodesRef = useRef<Map<string, number>>(new Map());
 
@@ -196,7 +196,7 @@ export const OutgoingOrdersPage2: React.FC = () => {
     setTrackingInput('');
     setTrackingMatchStatus('idle');
     setTrackingErrorMessage('');
-    setMatchCountdown(5);
+    setMatchCountdown(3);
     lastScannedOrderRef.current = null;
     setLastScannedOrder(null);
     setScanResult({ type: null, message: '' });
@@ -238,7 +238,7 @@ export const OutgoingOrdersPage2: React.FC = () => {
 
         setTrackingMatchStatus('matched');
         setTrackingErrorMessage('');
-        setMatchCountdown(5);
+        setMatchCountdown(3);
 
         // Register all codes of this completed order so any subsequent re-scan is ignored!
         const expTrack = completedTrackingIdRef.current || completedTrackingId || '';

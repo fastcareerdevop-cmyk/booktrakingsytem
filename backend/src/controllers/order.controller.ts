@@ -114,11 +114,15 @@ export async function getOrderItems(req: AuthenticatedRequest, res: Response, ne
 
 export async function getBarcodeSheet(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const { batchId, search, courier } = req.query;
+    const { batchId, search, courier, date, startDate, endDate, status } = req.query;
     const result = await orderService.getBarcodeSheetData({
       batchId: batchId as string,
       search: search as string,
       courier: courier as string,
+      date: date as string,
+      startDate: startDate as string,
+      endDate: endDate as string,
+      status: status as string,
     });
     return successResponse(res, 'Barcode sheet data retrieved', result);
   } catch (error) {
@@ -145,6 +149,16 @@ export async function deleteOrders(req: AuthenticatedRequest, res: Response, nex
       return errorResponse(res, 'orderIds must be an array of order IDs', 'INVALID_ORDER_IDS', 400);
     }
     const result = await orderService.deleteOrders(req.user!.id, orderIds);
+    return successResponse(res, result.message, result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function cancelOrderDispatch(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params;
+    const result = await orderService.cancelOrderDispatch(id, req.user?.id || 'system');
     return successResponse(res, result.message, result);
   } catch (error) {
     next(error);

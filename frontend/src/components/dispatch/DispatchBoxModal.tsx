@@ -63,8 +63,9 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
   const [trackingMatchStatus, setTrackingMatchStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
   const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
   const trackingInputRef = useRef<HTMLInputElement>(null);
-  const [matchCountdown, setMatchCountdown] = useState(5);
+  const [matchCountdown, setMatchCountdown] = useState(3);
   const matchTimerRef = useRef<any>(null);
+  const [isCancellingDispatch, setIsCancellingDispatch] = useState(false);
   const recentlyCompletedCodesRef = useRef<Map<string, number>>(new Map());
 
   const [feedback, setFeedback] = useState<{
@@ -120,12 +121,48 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
     setTrackingInput('');
     setTrackingMatchStatus('idle');
     setTrackingErrorMessage('');
-    setMatchCountdown(5);
+    setMatchCountdown(3);
 
     if (hasNextOrder && onProceedNextOrder) {
       onProceedNextOrder();
     } else {
       onClose();
+    }
+  };
+
+  const handleCancelDispatchAndRestoreStock = async () => {
+    if (!activeOrder) return;
+    const confirmCancel = window.confirm(
+      `Kya aap sach me ${activeOrder.studentName} ka dispatch cancel karna chahte hain? Is order ki sabhi books warehouse stock me wapas add ho jayengi aur order fir se Pending ho jayega.`
+    );
+    if (!confirmCancel) return;
+
+    setIsCancellingDispatch(true);
+    try {
+      if (matchTimerRef.current) {
+        clearInterval(matchTimerRef.current);
+        matchTimerRef.current = null;
+      }
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+
+      const res = await api.post(`/orders/${activeOrder.id}/cancel-dispatch`);
+      if (res.data.success) {
+        alert(res.data.message || 'Dispatch cancel ho gaya aur books stock me wapas add ho gayi hain.');
+        if (onOrderUpdated && res.data.data?.order) {
+          onOrderUpdated(res.data.data.order);
+        }
+        setShowPaytmSuccess(false);
+        setTrackingMatchStatus('idle');
+        setTrackingInput('');
+        onClose();
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Dispatch cancel karne me error aaya.');
+    } finally {
+      setIsCancellingDispatch(false);
     }
   };
 
@@ -153,7 +190,7 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
         }
         setTrackingMatchStatus('matched');
         setTrackingErrorMessage('');
-        setMatchCountdown(5);
+        setMatchCountdown(3);
 
         // Register completed order codes
         const now = Date.now();
@@ -624,13 +661,26 @@ export const DispatchBoxModal: React.FC<DispatchBoxModalProps> = ({
               </div>
 
               {trackingMatchStatus === 'matched' ? (
-                <button
-                  onClick={handleDismissSuccessOverlay}
-                  className="px-4 py-2 font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  <span>{hasNextOrder ? `Next Order Now (${matchCountdown}s)` : `Done & Close (${matchCountdown}s)`}</span>
-                  <ArrowRight size={13} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelDispatchAndRestoreStock}
+                    disabled={isCancellingDispatch}
+                    className="px-3 py-2 font-bold rounded-xl text-xs text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                    title="Cancel dispatch and return books back to warehouse stock"
+                  >
+                    <RotateCcw size={13} />
+                    <span>{isCancellingDispatch ? 'Cancelling...' : 'Cancel (स्टॉक वापस जोड़ें)'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDismissSuccessOverlay}
+                    className="px-4 py-2 font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <span>{hasNextOrder ? `Next Order (${matchCountdown}s)` : `Done (${matchCountdown}s)`}</span>
+                    <ArrowRight size={13} />
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => setShowPaytmSuccess(false)}

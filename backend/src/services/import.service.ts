@@ -14,6 +14,8 @@ export interface ParsedRowData {
   email: string | null;
   trackingId: string;
   weight?: string;
+  city?: string;
+  address?: string;
   courierName?: string;
   courierTrackingUrl?: string;
   productCode: string;
@@ -294,6 +296,21 @@ export async function parseAndPreviewExcel(
     ) {
       columnMap['weight'] = colNumber;
     }
+    // City / Destination / Location
+    else if (
+      val.includes('city') ||
+      val === 'town' ||
+      val.includes('destination') ||
+      val.includes('location') ||
+      val.includes('place') ||
+      val.includes('district')
+    ) {
+      columnMap['city'] = colNumber;
+    }
+    // Address / Full address
+    else if (val.includes('address') || val.includes('addr')) {
+      columnMap['address'] = colNumber;
+    }
   });
 
   // Verify minimal required columns (Strict requirement: Student Name, Mobile Number, Weight, and Book/Product)
@@ -402,6 +419,8 @@ export async function parseAndPreviewExcel(
     const mobileNumber = normalizeMobileNumber(rawMob as any);
     const rawWeight = columnMap['weight'] ? row.getCell(columnMap['weight']).value : null;
     const weight = rawWeight !== null && rawWeight !== undefined ? String(rawWeight).trim() : '';
+    const rawCity = columnMap['city'] ? String(row.getCell(columnMap['city']).value || '').trim() : '';
+    const rawAddress = columnMap['address'] ? String(row.getCell(columnMap['address']).value || '').trim() : '';
     const rawEmail = columnMap['email'] ? row.getCell(columnMap['email']).value : null;
     const rawQuantity = columnMap['quantity'] ? row.getCell(columnMap['quantity']).value : 1;
     const email = rawEmail ? normalizeEmail(String(rawEmail)) : null;
@@ -530,6 +549,8 @@ export async function parseAndPreviewExcel(
           email,
           trackingId,
           weight,
+          city: rawCity,
+          address: rawAddress,
           courierName,
           courierTrackingUrl,
           productCode: cleanProductCode,
@@ -656,6 +677,8 @@ export async function confirmImport(
     email: string | null;
     trackingId: string;
     weight: string;
+    city: string;
+    address: string;
     courierName: string;
     courierTrackingUrl: string;
     items: {
@@ -676,6 +699,8 @@ export async function confirmImport(
         email: row.email,
         trackingId: row.trackingId,
         weight: row.weight || '',
+        city: row.city || '',
+        address: row.address || '',
         courierName: row.courierName || '',
         courierTrackingUrl: row.courierTrackingUrl || '',
         items: [],
@@ -683,6 +708,8 @@ export async function confirmImport(
     } else {
       const existingGroup = orderGroups.get(orderKey)!;
       if (!existingGroup.weight && row.weight) existingGroup.weight = row.weight;
+      if (!existingGroup.city && row.city) existingGroup.city = row.city;
+      if (!existingGroup.address && row.address) existingGroup.address = row.address;
       if (!existingGroup.courierName && row.courierName) existingGroup.courierName = row.courierName;
       if (!existingGroup.courierTrackingUrl && row.courierTrackingUrl) {
         existingGroup.courierTrackingUrl = row.courierTrackingUrl;
@@ -749,6 +776,8 @@ export async function confirmImport(
       email: orderData.email,
       trackingId: orderData.trackingId,
       weight: orderData.weight || '',
+      city: orderData.city || '',
+      address: orderData.address || '',
       courierName: orderData.courierName,
       courierTrackingUrl: orderData.courierTrackingUrl,
       importBatchId: batch._id,

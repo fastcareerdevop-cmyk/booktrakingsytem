@@ -14,6 +14,7 @@ import { Modal } from '../../components/common/Modal';
 import { SecurityPinModal } from '../../components/common/SecurityPinModal';
 import { DispatchBoxModal } from '../../components/dispatch/DispatchBoxModal';
 import { StockDispatchHistoryModal } from '../../components/dispatch/StockDispatchHistoryModal';
+import { DispatchReportModal } from '../../components/dispatch/DispatchReportModal';
 import {
   Search,
   ArrowRight,
@@ -45,6 +46,7 @@ import {
   Pencil,
   Plus,
   KeyRound,
+  RotateCcw,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { playSuccessChime, playErrorTone, playOrderCompleteFanfare, speakVoiceAnnouncement, speakVoiceTwice, speakErrorMessage } from '../../utils/sound';
@@ -82,6 +84,9 @@ export const OutgoingOrdersPage: React.FC = () => {
   // Stock Dispatch History Modal
   const [showStockHistory, setShowStockHistory] = useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+
+  // Dispatch Report Modal State
+  const [isDispatchReportOpen, setIsDispatchReportOpen] = useState(false);
 
   const handleClearAllData = async () => {
     const confirmed = window.confirm(
@@ -122,8 +127,9 @@ export const OutgoingOrdersPage: React.FC = () => {
   const [trackingMatchStatus, setTrackingMatchStatus] = useState<'idle' | 'matched' | 'mismatch'>('idle');
   const [trackingErrorMessage, setTrackingErrorMessage] = useState('');
   const trackingInputRef = useRef<HTMLInputElement>(null);
-  const [matchCountdown, setMatchCountdown] = useState(5);
+  const [matchCountdown, setMatchCountdown] = useState(3);
   const matchTimerRef = useRef<any>(null);
+  const [isCancellingDispatch, setIsCancellingDispatch] = useState(false);
   const recentlyCompletedCodesRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -220,7 +226,7 @@ export const OutgoingOrdersPage: React.FC = () => {
     setTrackingInput('');
     setTrackingMatchStatus('idle');
     setTrackingErrorMessage('');
-    setMatchCountdown(5);
+    setMatchCountdown(3);
     lastScannedOrderRef.current = null;
     setLastScannedOrder(null);
     setScanResult({ type: null, message: '' });
@@ -229,6 +235,43 @@ export const OutgoingOrdersPage: React.FC = () => {
       setScannerCode('');
       scanInputRef.current?.focus();
     }, 100);
+  };
+
+  const handleCancelOrderDispatch = async (orderId?: string) => {
+    const targetId = orderId || completedOrderIdRef.current || completedOrderId || lastScannedOrderRef.current?.id || lastScannedOrder?.id;
+    if (!targetId) return;
+
+    const confirmCancel = window.confirm(
+      'Kya aap sach me is order ka dispatch cancel karna chahte hain? Is order ki sabhi books warehouse stock me wapas add ho jayengi aur order fir se Pending ho jayega.'
+    );
+    if (!confirmCancel) return;
+
+    setIsCancellingDispatch(true);
+    try {
+      if (matchTimerRef.current) {
+        clearInterval(matchTimerRef.current);
+        matchTimerRef.current = null;
+      }
+      if (autoCloseTimerRef.current) {
+        clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+
+      const res = await api.post(`/orders/${targetId}/cancel-dispatch`);
+      if (res.data.success) {
+        alert(res.data.message || 'Dispatch cancel ho gaya aur books warehouse stock me wapas add ho gayi hain.');
+        setShowPaytmSuccess(false);
+        setTrackingMatchStatus('idle');
+        setTrackingInput('');
+        lastScannedOrderRef.current = null;
+        setLastScannedOrder(null);
+        fetchOrdersRef.current?.(pagination.page);
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Dispatch cancel karne me error aaya.');
+    } finally {
+      setIsCancellingDispatch(false);
+    }
   };
 
   const handleVerifyTrackingCode = async (scannedRaw: string) => {
@@ -262,7 +305,7 @@ export const OutgoingOrdersPage: React.FC = () => {
 
         setTrackingMatchStatus('matched');
         setTrackingErrorMessage('');
-        setMatchCountdown(5);
+        setMatchCountdown(3);
 
         // Register all codes of this completed order so any subsequent re-scan is ignored!
         const expTrack = completedTrackingIdRef.current || completedTrackingId || '';
@@ -1282,13 +1325,26 @@ export const OutgoingOrdersPage: React.FC = () => {
               </div>
 
               {trackingMatchStatus === 'matched' ? (
-                <button
-                  onClick={handleDismissSuccessOverlay}
-                  className="px-4 py-2 font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  <span>Next Order Now ({matchCountdown}s)</span>
-                  <ArrowRight size={13} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCancelOrderDispatch()}
+                    disabled={isCancellingDispatch}
+                    className="px-3 py-2 font-bold rounded-xl text-xs text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                    title="Cancel dispatch and return books back to warehouse stock"
+                  >
+                    <RotateCcw size={13} />
+                    <span>{isCancellingDispatch ? 'Cancelling...' : 'Cancel (स्टॉक वापस जोड़ें)'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDismissSuccessOverlay}
+                    className="px-4 py-2 font-bold rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <span>Next Order ({matchCountdown}s)</span>
+                    <ArrowRight size={13} />
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => setShowPaytmSuccess(false)}
@@ -1862,24 +1918,34 @@ export const OutgoingOrdersPage: React.FC = () => {
           </p>
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleClearAllData}
-              disabled={isClearing}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-              title="Delete all current orders and reset database"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              {isClearing ? 'Clearing...' : 'Clear All Orders'}
-            </button>
-            <Link to="/admin/upload-excel">
-              <Button variant="primary" size="sm" icon={<Upload className="w-4 h-4" />}>
-                Upload New Excel Sheet
-              </Button>
-            </Link>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsDispatchReportOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+            title="Open Courier Dispatch Report & Manifest download/print window"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Dispatch Report (रिपोर्ट)
+          </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={handleClearAllData}
+                disabled={isClearing}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                title="Delete all current orders and reset database"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isClearing ? 'Clearing...' : 'Clear All Orders'}
+              </button>
+              <Link to="/admin/upload-excel">
+                <Button variant="primary" size="sm" icon={<Upload className="w-4 h-4" />}>
+                  Upload New Excel Sheet
+                </Button>
+              </Link>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Top Real-time Queue Statistics Cards ("total count mese ek kam hoge") */}
@@ -2514,6 +2580,12 @@ export const OutgoingOrdersPage: React.FC = () => {
         description={pinPromptConfig.description}
         actionLabel={pinPromptConfig.actionLabel}
         onSuccess={pinPromptConfig.onAuthorize}
+      />
+
+      {/* ─── Courier Dispatch Report Manifest Modal ─── */}
+      <DispatchReportModal
+        isOpen={isDispatchReportOpen}
+        onClose={() => setIsDispatchReportOpen(false)}
       />
     </div>
   );
