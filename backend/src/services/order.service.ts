@@ -491,11 +491,16 @@ export async function getDashboardSummary() {
 export async function getBarcodeSheetData(params: {
   batchId?: string;
   search?: string;
+  courier?: string;
 }) {
   const query: any = {};
   if (params.batchId) {
     const mongoose = require('mongoose');
     query.importBatchId = new mongoose.Types.ObjectId(params.batchId);
+  }
+  if (params.courier && params.courier !== 'ALL') {
+    const escapedCourier = params.courier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    query.courierName = new RegExp(`^${escapedCourier}$`, 'i');
   }
   if (params.search) {
     const escapedSearch = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -504,6 +509,7 @@ export async function getBarcodeSheetData(params: {
       { orderCode: regex },
       { studentName: regex },
       { trackingId: regex },
+      { courierName: regex },
       { email: regex },
       { productCode: regex },
       { mobileNumber: regex },
@@ -515,7 +521,7 @@ export async function getBarcodeSheetData(params: {
   }
 
   const orders = await Order.find(query)
-    .select('orderCode productCode studentName mobileNumber email trackingId weight items createdAt')
+    .select('orderCode productCode studentName mobileNumber email trackingId weight courierName courierTrackingUrl items createdAt')
     .sort({ orderCode: 1 });
 
   return orders.map((order: any) => {
@@ -544,6 +550,8 @@ export async function getBarcodeSheetData(params: {
       email: order.email,
       trackingId: order.trackingId,
       weight: order.weight || '',
+      courierName: order.courierName || '',
+      courierTrackingUrl: order.courierTrackingUrl || '',
       createdAt: order.createdAt,
       totalRequired: order.items.reduce((s: number, i: any) => s + i.requiredQuantity, 0),
       totalDispatched: order.items.reduce((s: number, i: any) => s + i.dispatchedQuantity, 0),

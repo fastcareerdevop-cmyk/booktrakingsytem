@@ -114,10 +114,11 @@ export async function getOrderItems(req: AuthenticatedRequest, res: Response, ne
 
 export async function getBarcodeSheet(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    const { batchId, search } = req.query;
+    const { batchId, search, courier } = req.query;
     const result = await orderService.getBarcodeSheetData({
       batchId: batchId as string,
       search: search as string,
+      courier: courier as string,
     });
     return successResponse(res, 'Barcode sheet data retrieved', result);
   } catch (error) {

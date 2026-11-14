@@ -56,6 +56,8 @@ interface BarcodeOrder {
   email: string | null;
   trackingId: string;
   weight?: string;
+  courierName?: string;
+  courierTrackingUrl?: string;
   totalRequired: number;
   totalDispatched: number;
   status: string;
@@ -74,6 +76,7 @@ export const BarcodeSheetPage: React.FC = () => {
   const [startDateFilter, setStartDateFilter] = useState('');
   const [endDateFilter, setEndDateFilter] = useState('');
   const [productCodeFilter, setProductCodeFilter] = useState('');
+  const [courierFilter, setCourierFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'TABLE' | 'CARDS'>('CARDS');
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [isDeletingOrders, setIsDeletingOrders] = useState(false);
@@ -215,6 +218,7 @@ export const BarcodeSheetPage: React.FC = () => {
           'S.No': idx + 1,
           'Student Code (Barcode)': order.orderCode || '-',
           'Tracking ID': order.trackingId || '-',
+          'Courier': order.courierName || '-',
           'Weight': order.weight || '-',
           'Student Name': order.studentName || '-',
           'Mobile Number': order.mobileNumber || '-',
@@ -242,6 +246,8 @@ export const BarcodeSheetPage: React.FC = () => {
         { wch: 6 },  // S.No
         { wch: 24 }, // Student Code (Barcode)
         { wch: 24 }, // Tracking ID
+        { wch: 18 }, // Courier
+        { wch: 12 }, // Weight
         { wch: 22 }, // Student Name
         { wch: 15 }, // Mobile
         { wch: 26 }, // Email
@@ -318,7 +324,7 @@ export const BarcodeSheetPage: React.FC = () => {
                     <h2 class="name-large"><span class="serial-inline">#${index + 1}</span> ${escapeHtml(order.studentName)}</h2>
 
                   </div>
-                  <p>Tracking ID: <strong>${escapeHtml(order.trackingId || '-')}</strong></p>
+                  <p>Tracking ID: <strong>${escapeHtml(order.trackingId || '-')}</strong>${order.courierName ? ` | Courier: <strong>${escapeHtml(order.courierName)}</strong>` : ''}${order.weight ? ` | ⚖️ ${escapeHtml(order.weight)}` : ''}</p>
                   <p>Student Code: <strong>${escapeHtml(order.orderCode || '-')}</strong></p>
                   <p class="course"><span>Product:</span> ${escapeHtml(courseName)}</p>
                   <p class="product-code"><span>Product Code:</span> ${escapeHtml(productCode)}</p>
@@ -907,6 +913,8 @@ export const BarcodeSheetPage: React.FC = () => {
               <span style="font-family: monospace; font-weight: bold;">Student Code: ${order.orderCode || '-'}</span>
             </div>
             <div class="row"><span class="label">Tracking ID:</span><span class="val" style="font-family: monospace;">${order.trackingId || '-'}</span></div>
+            <div class="row"><span class="label">Courier:</span><span class="val" style="font-weight: bold; color: #0284c7;">${order.courierName || '-'}</span></div>
+            <div class="row"><span class="label">Weight:</span><span class="val" style="font-weight: bold;">${order.weight || '-'}</span></div>
             <div class="row"><span class="label">Student Name:</span><span class="val" style="font-size: 14px;">${order.studentName}</span></div>
             <div class="row"><span class="label">Mobile / Phone:</span><span class="val">${order.mobileNumber || '-'}</span></div>
             <div class="row"><span class="label">Email:</span><span class="val">${order.email || '-'}</span></div>
@@ -933,6 +941,15 @@ export const BarcodeSheetPage: React.FC = () => {
     new Set(orders.flatMap((order) => (order.products || []).map((product) => product.productCode)))
   ).filter(Boolean);
 
+  const courierOptions = React.useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach((order) => {
+      const c = (order.courierName || '').trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [orders]);
+
   // Date inputs and order timestamps are compared using the business timezone (IST).
   const getOrderDateKey = (value: string) => {
     const date = new Date(value);
@@ -941,11 +958,14 @@ export const BarcodeSheetPage: React.FC = () => {
       : new Date(date.getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
   };
 
-  // Apply status, date range, and course filters to the loaded search results.
+  // Apply status, date range, course, and courier filters to the loaded search results.
   const filteredOrders = orders.filter((order) => {
     if (statusFilter === 'PENDING' && order.status === 'COMPLETED') return false;
     if (statusFilter === 'COMPLETED' && order.status !== 'COMPLETED') return false;
     if (productCodeFilter && !(order.products || []).some((product) => product.productCode === productCodeFilter)) {
+      return false;
+    }
+    if (courierFilter !== 'ALL' && (order.courierName || '').trim().toUpperCase() !== courierFilter.toUpperCase()) {
       return false;
     }
 
@@ -957,6 +977,9 @@ export const BarcodeSheetPage: React.FC = () => {
 
   const matchingOrders = orders.filter((order) => {
     if (productCodeFilter && !(order.products || []).some((product) => product.productCode === productCodeFilter)) {
+      return false;
+    }
+    if (courierFilter !== 'ALL' && (order.courierName || '').trim().toUpperCase() !== courierFilter.toUpperCase()) {
       return false;
     }
     const orderDate = order.createdAt ? getOrderDateKey(order.createdAt) : '';
@@ -1150,6 +1173,22 @@ export const BarcodeSheetPage: React.FC = () => {
               );
             })}
           </select>
+          <select
+            value={courierFilter}
+            onChange={(e) => {
+              setCourierFilter(e.target.value);
+              setSelectedOrderIds(new Set());
+            }}
+            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white max-w-44 focus:outline-none focus:ring-2 focus:ring-red-500 font-medium text-slate-800"
+            aria-label="Filter by courier"
+          >
+            <option value="ALL">All Couriers (सभी कूरियर)</option>
+            {courierOptions.map((courier) => (
+              <option key={courier} value={courier}>
+                🚚 {courier}
+              </option>
+            ))}
+          </select>
           <label className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
             From
             <input
@@ -1192,6 +1231,7 @@ export const BarcodeSheetPage: React.FC = () => {
               setStartDateFilter('');
               setEndDateFilter('');
               setProductCodeFilter('');
+              setCourierFilter('ALL');
               setStatusFilter('ALL');
               setSelectedOrderIds(new Set());
               fetchOrders('');
@@ -1258,6 +1298,7 @@ export const BarcodeSheetPage: React.FC = () => {
                     <th className="py-3 px-3 text-center w-64">Bar Code (बारकोड)</th>
                     <th className="py-3 px-3 whitespace-nowrap">Student Code</th>
                     <th className="py-3 px-3 whitespace-nowrap">Tracking ID</th>
+                    <th className="py-3 px-3 whitespace-nowrap">Courier</th>
                     <th className="py-3 px-3 whitespace-nowrap">Weight</th>
                     <th className="py-3 px-3 whitespace-nowrap">Student Name</th>
                     <th className="py-3 px-3">Course (कोर्स)</th>
@@ -1319,6 +1360,17 @@ export const BarcodeSheetPage: React.FC = () => {
                         <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded border border-slate-200 text-sm">
                           {order.trackingId || '-'}
                         </span>
+                      </td>
+
+                      {/* Courier */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        {order.courierName ? (
+                          <span className="font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 text-xs inline-flex items-center gap-1">
+                            🚚 {order.courierName}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">-</span>
+                        )}
                       </td>
 
                       {/* Weight */}
@@ -1448,14 +1500,19 @@ export const BarcodeSheetPage: React.FC = () => {
                         #{index + 1}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1 break-words">
-                      Tracking ID: <strong className="font-mono text-red-700">{order.trackingId || '-'}</strong>
+                    <div className="text-[10px] text-slate-500 mt-1 break-words flex flex-wrap items-center gap-1.5">
+                      <span>Tracking ID: <strong className="font-mono text-red-700">{order.trackingId || '-'}</strong></span>
+                      {order.courierName && (
+                        <span className="font-bold text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 inline-flex items-center gap-0.5 text-[9.5px]">
+                          🚚 {order.courierName}
+                        </span>
+                      )}
                       {order.weight && (
-                        <span className="ml-2 font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                        <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[9.5px]">
                           ⚖️ {order.weight}
                         </span>
                       )}
-                    </p>
+                    </div>
                     <p className="text-[10px] text-slate-500 mt-0.5 break-all">
                       Student Code: <strong className="font-mono text-slate-700">{order.orderCode || '-'}</strong>
                     </p>
