@@ -399,7 +399,7 @@ export const BarcodeSheetPage: React.FC = () => {
           'S.No': idx + 1,
           'Student Code (Barcode)': order.orderCode || '-',
           'Tracking ID': order.trackingId || '-',
-          'Courier': order.courierName || '-',
+          'Courier': getResolvedCourier(order),
           'Weight': order.weight || '-',
           'Student Name': order.studentName || '-',
           'Mobile Number': order.mobileNumber || '-',
@@ -1122,10 +1122,23 @@ export const BarcodeSheetPage: React.FC = () => {
     new Set(orders.flatMap((order) => (order.products || []).map((product) => product.productCode)))
   ).filter(Boolean);
 
+  // Helper to determine courier from explicit field or tracking number pattern
+  const getResolvedCourier = (order: BarcodeOrder): string => {
+    const c = (order.courierName || '').trim();
+    if (c) return c;
+    const track = (order.trackingId || '').trim().toUpperCase();
+    if (/^50\d+/.test(track)) return 'Trackon';
+    if (/IN$/.test(track)) return 'India Post';
+    if (/^[DZBK]\d+/i.test(track) || /^D\d+/i.test(track)) return 'DTDC';
+    return 'DTDC';
+  };
+
   const courierOptions = React.useMemo(() => {
-    const set = new Set<string>();
+    // Always provide the primary couriers (DTDC, Trackon, India Post, Delhivery)
+    // plus any additional courier parsed from Excel
+    const set = new Set<string>(['DTDC', 'Trackon', 'India Post', 'Delhivery']);
     orders.forEach((order) => {
-      const c = (order.courierName || '').trim();
+      const c = getResolvedCourier(order);
       if (c) set.add(c);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -1146,8 +1159,10 @@ export const BarcodeSheetPage: React.FC = () => {
     if (productCodeFilter && !(order.products || []).some((product) => product.productCode === productCodeFilter)) {
       return false;
     }
-    if (courierFilter !== 'ALL' && (order.courierName || '').trim().toUpperCase() !== courierFilter.toUpperCase()) {
-      return false;
+    if (courierFilter !== 'ALL') {
+      const resolved = getResolvedCourier(order).toUpperCase();
+      const target = courierFilter.toUpperCase();
+      if (resolved !== target) return false;
     }
 
     const orderDate = order.createdAt ? getOrderDateKey(order.createdAt) : '';
@@ -1160,8 +1175,10 @@ export const BarcodeSheetPage: React.FC = () => {
     if (productCodeFilter && !(order.products || []).some((product) => product.productCode === productCodeFilter)) {
       return false;
     }
-    if (courierFilter !== 'ALL' && (order.courierName || '').trim().toUpperCase() !== courierFilter.toUpperCase()) {
-      return false;
+    if (courierFilter !== 'ALL') {
+      const resolved = getResolvedCourier(order).toUpperCase();
+      const target = courierFilter.toUpperCase();
+      if (resolved !== target) return false;
     }
     const orderDate = order.createdAt ? getOrderDateKey(order.createdAt) : '';
     if (startDateFilter && (!orderDate || orderDate < startDateFilter)) return false;
@@ -1545,13 +1562,9 @@ export const BarcodeSheetPage: React.FC = () => {
 
                       {/* Courier */}
                       <td className="py-2.5 px-3 whitespace-nowrap">
-                        {order.courierName ? (
-                          <span className="font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 text-xs inline-flex items-center gap-1">
-                            🚚 {order.courierName}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs">-</span>
-                        )}
+                        <span className="font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded border border-sky-200 text-xs inline-flex items-center gap-1">
+                          🚚 {getResolvedCourier(order)}
+                        </span>
                       </td>
 
                       {/* Weight */}
@@ -1701,11 +1714,9 @@ export const BarcodeSheetPage: React.FC = () => {
                     </div>
                     <div className="text-[10px] text-slate-500 mt-1 break-words flex flex-wrap items-center gap-1.5">
                       <span>Tracking ID: <strong className="font-mono text-red-700">{order.trackingId || '-'}</strong></span>
-                      {order.courierName && (
-                        <span className="font-bold text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 inline-flex items-center gap-0.5 text-[9.5px]">
-                          🚚 {order.courierName}
-                        </span>
-                      )}
+                      <span className="font-bold text-sky-800 bg-sky-50 px-1.5 py-0.5 rounded border border-sky-200 inline-flex items-center gap-0.5 text-[9.5px]">
+                        🚚 {getResolvedCourier(order)}
+                      </span>
                       {order.weight && (
                         <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[9.5px]">
                           ⚖️ {order.weight}

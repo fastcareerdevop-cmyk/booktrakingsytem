@@ -5,6 +5,7 @@ import { parseDateFilter } from '../utils/date';
 import { sendOrderEmail } from './email.service';
 import { sendOrderWhatsAppMessage } from './whatsapp.service';
 import { verifySecurityPin } from './security.service';
+import { resolveCourierTracking } from '../utils/normalize';
 
 export type ItemStatus = 'PENDING' | 'PARTIALLY_DISPATCHED' | 'COMPLETED';
 export type OrderStatus = 'PENDING' | 'PARTIALLY_DISPATCHED' | 'COMPLETED';
@@ -491,8 +492,27 @@ export async function getBarcodeSheetData(params: {
     query.importBatchId = new mongoose.Types.ObjectId(params.batchId);
   }
   if (params.courier && params.courier !== 'ALL') {
-    const escapedCourier = params.courier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    query.courierName = new RegExp(`^${escapedCourier}$`, 'i');
+    const courierParam = params.courier.trim();
+    if (courierParam.toLowerCase() === 'trackon') {
+      query.$or = [
+        { courierName: /track[ou]n/i },
+        { trackingId: /^50\d+/ },
+      ];
+    } else if (courierParam.toLowerCase() === 'dtdc') {
+      query.$or = [
+        { courierName: /dtdc/i },
+        { trackingId: /^[DZBK]\d+/i },
+        { $and: [{ courierName: { $in: ['', null] } }, { trackingId: { $not: /^50\d+/ } }, { trackingId: { $not: /IN$/i } }] },
+      ];
+    } else if (courierParam.toLowerCase() === 'india post' || courierParam.toLowerCase() === 'indiapost') {
+      query.$or = [
+        { courierName: /india\s*post|speed\s*post|\bpost\b/i },
+        { trackingId: /IN$/i },
+      ];
+    } else {
+      const escapedCourier = courierParam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query.courierName = new RegExp(`^${escapedCourier}$`, 'i');
+    }
   }
   if (params.search) {
     const escapedSearch = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -532,6 +552,14 @@ export async function getBarcodeSheetData(params: {
       productName: name,
     }));
 
+    const resolvedCourier = resolveCourierTracking(order.courierName, order.courierTrackingUrl, order.trackingId);
+    const courierName = order.courierName || resolvedCourier.courierName;
+    const courierTrackingUrl = order.courierTrackingUrl || resolvedCourier.courierTrackingUrl;
+
+    if (!order.courierName && courierName) {
+      Order.updateOne({ _id: order._id }, { $set: { courierName, courierTrackingUrl } }).exec().catch(() => {});
+    }
+
     return {
       id: order._id.toString(),
       orderCode: order.orderCode || order.productCode,
@@ -542,8 +570,8 @@ export async function getBarcodeSheetData(params: {
       email: order.email,
       trackingId: order.trackingId,
       weight: order.weight || '',
-      courierName: order.courierName || '',
-      courierTrackingUrl: order.courierTrackingUrl || '',
+      courierName,
+      courierTrackingUrl,
       createdAt: order.createdAt,
       totalRequired: order.items.reduce((s: number, i: any) => s + i.requiredQuantity, 0),
       totalDispatched: order.items.reduce((s: number, i: any) => s + i.dispatchedQuantity, 0),

@@ -436,11 +436,6 @@ export async function parseAndPreviewExcel(
       });
     }
 
-    // Auto-resolve Courier Name & Tracking Link (DTDC, Trackon, India Post, Delhivery)
-    const courierResolved = resolveCourierTracking(courierName, courierTrackingUrl);
-    courierName = courierResolved.courierName;
-    courierTrackingUrl = courierResolved.courierTrackingUrl;
-
     // Strict validation: Every column must have data!
     if (!studentName) rowErrors.push('Student Name missing / khali hai.');
     if (!mobileNumber) {
@@ -471,6 +466,11 @@ export async function parseAndPreviewExcel(
       trackingId = `${datePrefix}${String(autoTrackingCounter).padStart(3, '0')}`;
       autoTrackingCounter++;
     }
+
+    // Auto-resolve Courier Name & Tracking Link (DTDC, Trackon, India Post, Delhivery)
+    const courierResolved = resolveCourierTracking(courierName, courierTrackingUrl, trackingId);
+    courierName = courierResolved.courierName;
+    courierTrackingUrl = courierResolved.courierTrackingUrl;
 
     // Extract Course / Product info
     const rawCourse = columnMap['productName'] ? String(row.getCell(columnMap['productName']).value || '').trim() : '';
