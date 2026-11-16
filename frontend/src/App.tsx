@@ -99,7 +99,10 @@ const EmployeePageGuard: React.FC<{
   }
 
   const permissions = user?.permissions || [];
-  if (!permissions.includes(pageId)) {
+  const hasPermission =
+    permissions.includes(pageId) ||
+    (pageId === 'dispatch_entry' && permissions.includes('outgoing_orders_2'));
+  if (!hasPermission) {
     return <AccessDeniedPage pageName={pageName} />;
   }
 
@@ -146,8 +149,8 @@ export const App: React.FC = () => {
               <Route path="import-history" element={<ImportHistoryPage />} />
               <Route path="orders" element={<AllOrdersPage />} />
               <Route path="orders/:id" element={<OrderDetailPage />} />
-              <Route path="outgoing-orders" element={<OutgoingOrdersPage />} />
-              <Route path="outgoing-orders-2" element={<OutgoingOrdersPage2 />} />
+              <Route path="outgoing-orders" element={<OutgoingOrdersPage2 />} />
+              <Route path="outgoing-orders-2" element={<Navigate to="/admin/outgoing-orders" replace />} />
               <Route path="preparation" element={<PreparationPage />} />
               <Route path="invert" element={<InvertStockPage />} />
               <Route path="available-stock" element={<AvailableStockPage />} />
@@ -185,17 +188,13 @@ export const App: React.FC = () => {
                 path="outgoing-orders"
                 element={
                   <EmployeePageGuard pageId="dispatch_entry" pageName="Dispatch Entry (Outgoing Sheet)">
-                    <OutgoingOrdersPage />
+                    <OutgoingOrdersPage2 />
                   </EmployeePageGuard>
                 }
               />
               <Route
                 path="outgoing-orders-2"
-                element={
-                  <EmployeePageGuard pageId="outgoing_orders_2" pageName="Outgoing Sheet 2">
-                    <OutgoingOrdersPage2 />
-                  </EmployeePageGuard>
-                }
+                element={<Navigate to="/employee/outgoing-orders" replace />}
               />
               <Route
                 path="preparation"

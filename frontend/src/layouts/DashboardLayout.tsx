@@ -43,7 +43,6 @@ export const DashboardLayout: React.FC = () => {
     { label: 'Import History', path: '/admin/import-history', icon: <History className="w-5 h-5" /> },
     { label: 'All Orders', path: '/admin/orders', icon: <Boxes className="w-5 h-5" /> },
     { label: 'Outgoing Sheet', path: '/admin/outgoing-orders', icon: <Truck className="w-5 h-5" /> },
-    { label: 'Outgoing Sheet 2', path: '/admin/outgoing-orders-2', icon: <Layers className="w-5 h-5" /> },
     { label: 'Preparation (तैयारी)', path: '/admin/preparation', icon: <PackageCheck className="w-5 h-5" /> },
     { label: 'Stock Inward', path: '/admin/invert', icon: <PackagePlus className="w-5 h-5" /> },
     { label: 'Available Stock', path: '/admin/available-stock', icon: <Boxes className="w-5 h-5" /> },
@@ -62,7 +61,6 @@ export const DashboardLayout: React.FC = () => {
   const allEmployeeNavItems = [
     { id: 'dashboard', label: 'Dashboard', path: '/employee/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { id: 'dispatch_entry', label: 'Outgoing Sheet', path: '/employee/outgoing-orders', icon: <Truck className="w-5 h-5" /> },
-    { id: 'outgoing_orders_2', label: 'Outgoing Sheet 2', path: '/employee/outgoing-orders-2', icon: <Layers className="w-5 h-5" /> },
     { id: 'preparation', label: 'Preparation (तैयारी)', path: '/employee/preparation', icon: <PackageCheck className="w-5 h-5" /> },
     { id: 'barcode_sheet', label: 'Student Barcode Sheet', path: '/employee/barcode-sheet', icon: <ScanLine className="w-5 h-5" /> },
     { id: 'barcode_catalog', label: 'Barcode Directory (बारकोड सूची)', path: '/employee/barcode-catalog', icon: <Barcode className="w-5 h-5" /> },
@@ -79,7 +77,12 @@ export const DashboardLayout: React.FC = () => {
   // Filter employee navigation items based on assigned permissions
   const filteredEmployeeNavItems = isPending || isRestricted
     ? []
-    : allEmployeeNavItems.filter((item) => userPerms.includes(item.id));
+    : allEmployeeNavItems.filter((item) => {
+        if (item.id === 'dispatch_entry') {
+          return userPerms.includes('dispatch_entry') || userPerms.includes('outgoing_orders_2');
+        }
+        return userPerms.includes(item.id);
+      });
 
   const navItems = isAdmin ? adminNavItems : filteredEmployeeNavItems;
 

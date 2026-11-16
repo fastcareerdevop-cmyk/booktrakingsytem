@@ -28,15 +28,6 @@ export const DISPATCH_SYSTEM_PAGES: RbacPageItem[] = [
     defaultForEmployee: true,
   },
   {
-    id: 'outgoing_orders_2',
-    name: 'Outgoing Sheet 2',
-    category: 'Operations',
-    description: 'Secondary outgoing dispatch workflow and bulk order processing',
-    employeePath: '/employee/outgoing-orders-2',
-    adminPath: '/admin/outgoing-orders-2',
-    defaultForEmployee: true,
-  },
-  {
     id: 'preparation',
     name: 'Preparation (तैयारी)',
     category: 'Operations',

@@ -11,6 +11,7 @@ import { Button } from '../../components/common/Button';
 import { DateFilterSelect } from '../../components/common/DateFilterSelect';
 import { DispatchBoxModal } from '../../components/dispatch/DispatchBoxModal';
 import { StockDispatchHistoryModal } from '../../components/dispatch/StockDispatchHistoryModal';
+import { DispatchReportModal } from '../../components/dispatch/DispatchReportModal';
 import {
   Search,
   ArrowRight,
@@ -38,6 +39,7 @@ import {
   AlertTriangle,
   Boxes,
   ShieldCheck,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { playSuccessChime, playErrorTone, playOrderCompleteFanfare, speakVoiceAnnouncement, speakVoiceTwice, speakErrorMessage } from '../../utils/sound';
@@ -47,6 +49,7 @@ export const OutgoingOrdersPage2: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isDispatchReportOpen, setIsDispatchReportOpen] = useState(false);
 
   // Preparation & Warehouse Stock Split (Shelf vs Packaged)
   const [prepSummary, setPrepSummary] = useState({
@@ -1653,10 +1656,10 @@ export const OutgoingOrdersPage2: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-              Outgoing Sheet 2
+              Outgoing Sheet
             </h1>
-            <span className="text-[10px] bg-slate-100 text-slate-600 font-medium px-2 py-0.5 rounded-full border border-slate-200">
-              V2 Smart Dispatch
+            <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full border border-red-200">
+              Active Dispatch Station
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -1664,24 +1667,35 @@ export const OutgoingOrdersPage2: React.FC = () => {
           </p>
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleClearAllData}
-              disabled={isClearing}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-              title="Delete all current orders and reset database"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              {isClearing ? 'Clearing...' : 'Clear All'}
-            </button>
-            <Link to="/admin/upload-excel">
-              <Button variant="primary" size="sm" icon={<Upload className="w-3.5 h-3.5" />}>
-                Upload Excel
-              </Button>
-            </Link>
-          </div>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setIsDispatchReportOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+            title="Open Courier Dispatch Report & Manifest download/print window"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Dispatch Report (रिपोर्ट)
+          </button>
+
+          {isAdmin && (
+            <>
+              <button
+                onClick={handleClearAllData}
+                disabled={isClearing}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 cursor-pointer"
+                title="Delete all current orders and reset database"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isClearing ? 'Clearing...' : 'Clear All'}
+              </button>
+              <Link to="/admin/upload-excel">
+                <Button variant="primary" size="sm" icon={<Upload className="w-3.5 h-3.5" />}>
+                  Upload Excel
+                </Button>
+              </Link>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ─── 6 UNIFORM SUMMARY METRIC CARDS ─── */}
@@ -2068,6 +2082,12 @@ export const OutgoingOrdersPage2: React.FC = () => {
       <StockDispatchHistoryModal
         isOpen={showStockHistory}
         onClose={() => setShowStockHistory(false)}
+      />
+
+      {/* ─── Courier Dispatch Report Manifest Modal ─── */}
+      <DispatchReportModal
+        isOpen={isDispatchReportOpen}
+        onClose={() => setIsDispatchReportOpen(false)}
       />
     </div>
   );
