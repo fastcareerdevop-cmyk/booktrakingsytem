@@ -239,7 +239,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
     XLSX.writeFile(workbook, fileName);
   };
 
-  // Print Manifest (Clean A4 Letterhead, 2 Parts Side-by-Side to eliminate blank space, 2 Signatures per Courier)
+  // Print Manifest (Clean Native 8-Column Table: Zero blank space on Page 1, instant pagination across A4)
   const handlePrintManifest = () => {
     if (courierGroups.length === 0 || filteredOrders.length === 0) {
       alert('No dispatch orders available to print.');
@@ -260,20 +260,36 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
         const leftOrders = group.orders.slice(0, half);
         const rightOrders = group.orders.slice(half);
 
-        const renderRows = (orderList: any[], startIndex: number) =>
-          orderList
-            .map((o, i) => `
-              <tr>
-                <td style="text-align: center; font-weight: bold; width: 32px; padding: 5px 4px;">${startIndex + i + 1}</td>
-                <td style="font-weight: 700; color: #0f172a; padding: 5px 6px; font-size: 11px;">${escapeHtml(o.studentName || '-')}</td>
-                <td style="text-align: center; font-weight: 600; width: 55px; padding: 5px 4px;">${escapeHtml(o.weight || '-')}</td>
-                <td style="font-family: monospace; font-weight: bold; text-align: center; width: 135px; padding: 5px 6px; font-size: 11px;">${escapeHtml(o.trackingId || '-')}</td>
-              </tr>
-            `)
-            .join('');
+        const rowsHtml = Array.from({ length: half })
+          .map((_, r) => {
+            const leftO = leftOrders[r];
+            const rightO = rightOrders[r];
 
-        const leftRowsHtml = renderRows(leftOrders, 0);
-        const rightRowsHtml = renderRows(rightOrders, half);
+            return `
+              <tr>
+                <td style="text-align: center; font-weight: bold; width: 28px; padding: 4px 2px;">${r + 1}</td>
+                <td style="font-weight: 700; color: #0f172a; padding: 4px 5px; font-size: 10.5px;">${escapeHtml(leftO ? leftO.studentName || '-' : '')}</td>
+                <td style="text-align: center; font-weight: 600; width: 48px; padding: 4px 2px;">${escapeHtml(leftO ? leftO.weight || '-' : '')}</td>
+                <td style="font-family: monospace; font-weight: bold; text-align: center; width: 125px; padding: 4px 4px; font-size: 10.5px; border-right: 2px solid #94a3b8;">${escapeHtml(leftO ? leftO.trackingId || '-' : '')}</td>
+                ${
+                  rightO
+                    ? `
+                  <td style="text-align: center; font-weight: bold; width: 28px; padding: 4px 2px;">${half + r + 1}</td>
+                  <td style="font-weight: 700; color: #0f172a; padding: 4px 5px; font-size: 10.5px;">${escapeHtml(rightO.studentName || '-')}</td>
+                  <td style="text-align: center; font-weight: 600; width: 48px; padding: 4px 2px;">${escapeHtml(rightO.weight || '-')}</td>
+                  <td style="font-family: monospace; font-weight: bold; text-align: center; width: 125px; padding: 4px 4px; font-size: 10.5px;">${escapeHtml(rightO.trackingId || '-')}</td>
+                `
+                    : `
+                  <td style="width: 28px;"></td>
+                  <td></td>
+                  <td style="width: 48px;"></td>
+                  <td style="width: 125px;"></td>
+                `
+                }
+              </tr>
+            `;
+          })
+          .join('');
 
         return `
           <div class="courier-section">
@@ -282,46 +298,23 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
               <span class="courier-meta">${group.totalParcels} Parcels ${group.totalWeightKg ? `| Total Weight: ${group.totalWeightKg} KG` : ''}</span>
             </div>
 
-            <!-- Dual Side-by-Side Tables -->
-            <div class="dual-tables-grid">
-              
-              <!-- Part 1 (Left Column) -->
-              <div class="dual-col">
-                <table class="manifest-table">
-                  <thead>
-                    <tr>
-                      <th style="width: 32px; text-align: center;">#</th>
-                      <th>STUDENT NAME</th>
-                      <th style="width: 55px; text-align: center;">WT</th>
-                      <th style="width: 135px; text-align: center;">TRACKING ID (AWB)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${leftRowsHtml}
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Part 2 (Right Column) -->
-              ${rightOrders.length > 0 ? `
-                <div class="dual-col">
-                  <table class="manifest-table">
-                    <thead>
-                      <tr>
-                        <th style="width: 32px; text-align: center;">#</th>
-                        <th>STUDENT NAME</th>
-                        <th style="width: 55px; text-align: center;">WT</th>
-                        <th style="width: 135px; text-align: center;">TRACKING ID (AWB)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${rightRowsHtml}
-                    </tbody>
-                  </table>
-                </div>
-              ` : ''}
-
-            </div>
+            <table class="manifest-table">
+              <thead>
+                <tr>
+                  <th style="width: 28px; text-align: center;">#</th>
+                  <th>STUDENT NAME</th>
+                  <th style="width: 48px; text-align: center;">WT</th>
+                  <th style="width: 125px; text-align: center; border-right: 2px solid #94a3b8;">TRACKING ID</th>
+                  <th style="width: 28px; text-align: center;">#</th>
+                  <th>STUDENT NAME</th>
+                  <th style="width: 48px; text-align: center;">WT</th>
+                  <th style="width: 125px; text-align: center;">TRACKING ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
 
             <!-- 2-Party Signature Box for this Courier -->
             <div class="signatures-box">
@@ -347,7 +340,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
         <style>
           @page {
             size: A4 portrait;
-            margin: 8mm 8mm 10mm 8mm;
+            margin: 6mm 6mm 8mm 6mm;
           }
           * {
             box-sizing: border-box;
@@ -355,7 +348,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           }
           body {
             margin: 0;
-            padding: 12px;
+            padding: 8px 10px;
             color: #1e293b;
             background: #fff;
             font-size: 11px;
@@ -363,23 +356,23 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           .header-table {
             width: 100%;
             border-bottom: 2.5px solid #dc2626;
-            padding-bottom: 6px;
-            margin-bottom: 12px;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
           }
           .brand-title {
-            font-size: 22px;
+            font-size: 20px;
             font-weight: 900;
             color: #dc2626;
             letter-spacing: -0.5px;
             line-height: 1.1;
           }
           .brand-sub {
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 600;
             color: #64748b;
           }
           .doc-title {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 800;
             color: #0f172a;
             text-transform: uppercase;
@@ -388,63 +381,58 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           .meta-pill {
             display: inline-block;
             background: #f1f5f9;
-            padding: 3px 8px;
+            padding: 2px 7px;
             border-radius: 4px;
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 700;
-            margin-top: 3px;
+            margin-top: 2px;
           }
           .courier-section {
-            margin-bottom: 20px;
-            page-break-inside: avoid;
+            margin-bottom: 16px;
           }
           .courier-banner {
             background: #0f172a;
             color: #fff;
-            padding: 5px 10px;
-            border-radius: 4px 4px 0 0;
+            padding: 4px 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            page-break-after: avoid;
           }
           .courier-title {
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 800;
             letter-spacing: 0.5px;
           }
           .courier-meta {
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 600;
             color: #cbd5e1;
-          }
-          .dual-tables-grid {
-            display: flex;
-            gap: 8px;
-            align-items: flex-start;
-            width: 100%;
-          }
-          .dual-col {
-            flex: 1;
-            min-width: 0;
           }
           .manifest-table {
             width: 100%;
             border-collapse: collapse;
           }
+          .manifest-table thead {
+            display: table-header-group;
+          }
+          .manifest-table tr {
+            page-break-inside: avoid;
+          }
           .manifest-table th {
-            background: #f8fafc;
-            color: #334155;
-            font-weight: 700;
-            font-size: 10px;
+            background: #f1f5f9;
+            color: #1e293b;
+            font-weight: 800;
+            font-size: 9.5px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
             border: 1px solid #cbd5e1;
-            padding: 5px 6px;
+            padding: 4px 4px;
           }
           .manifest-table td {
             border: 1px solid #cbd5e1;
-            padding: 4px 6px;
-            font-size: 10.5px;
+            padding: 3.5px 4px;
+            font-size: 10px;
             vertical-align: middle;
           }
           .manifest-table tr:nth-child(even) {
@@ -454,7 +442,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
             margin-top: 10px;
             border: 1.5px solid #cbd5e1;
             border-radius: 4px;
-            padding: 10px 14px;
+            padding: 8px 14px;
             background: #fafafa;
             display: flex;
             justify-content: space-between;
@@ -465,7 +453,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           }
           .sig-role {
             font-weight: 800;
-            font-size: 10.5px;
+            font-size: 10px;
             color: #0f172a;
             text-transform: uppercase;
             margin-bottom: 10px;
@@ -503,7 +491,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
 
         ${courierSectionsHtml}
 
-        <div style="margin-top: 14px; font-size: 9px; color: #94a3b8; text-align: center;">
+        <div style="margin-top: 10px; font-size: 9px; color: #94a3b8; text-align: center;">
           Manifest Generated by FAST Book Tracking System on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
         </div>
 
@@ -721,85 +709,77 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
                     </div>
                   </div>
 
-                  {/* 2-Part Side-by-Side Tables to eliminate blank space */}
-                  <div className="p-3 bg-slate-50/50">
-                    <div className={`grid gap-3 items-start ${rightOrders.length > 0 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-                      
-                      {/* Part 1 (Left Table) */}
-                      <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-2xs">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[10.5px] border-b border-slate-200">
-                            <tr>
-                              <th className="py-2.5 px-2.5 w-10 text-center">#</th>
-                              <th className="py-2.5 px-3">Student Name</th>
-                              <th className="py-2.5 px-2.5 text-center w-20">Weight</th>
-                              <th className="py-2.5 px-3 text-center w-36">Tracking ID (AWB)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-150">
-                            {leftOrders.map((order, idx) => (
-                              <tr key={order.id || idx} className="hover:bg-slate-50 transition-colors">
-                                <td className="py-2 px-2.5 text-center font-bold text-slate-500">{idx + 1}</td>
-                                <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[180px]" title={order.studentName}>
-                                  {order.studentName}
-                                </td>
-                                <td className="py-2 px-2.5 text-center font-semibold text-slate-800">
-                                  {order.weight ? (
-                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
-                                      {order.weight}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400">-</span>
-                                  )}
-                                </td>
-                                <td className="py-2 px-3 font-mono font-bold text-slate-900 text-center text-[11px]">
-                                  {order.trackingId || '-'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                  {/* 2-Part Side-by-Side Unified Table to eliminate blank space */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
+                        <tr>
+                          <th className="py-2.5 px-2.5 w-10 text-center">#</th>
+                          <th className="py-2.5 px-3">Student Name</th>
+                          <th className="py-2.5 px-2 text-center w-20">Weight</th>
+                          <th className="py-2.5 px-3 text-center w-36 border-r-2 border-slate-300">Tracking ID (AWB)</th>
+                          <th className="py-2.5 px-2.5 w-10 text-center">#</th>
+                          <th className="py-2.5 px-3">Student Name</th>
+                          <th className="py-2.5 px-2 text-center w-20">Weight</th>
+                          <th className="py-2.5 px-3 text-center w-36">Tracking ID (AWB)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-150">
+                        {Array.from({ length: half }).map((_, r) => {
+                          const leftO = leftOrders[r];
+                          const rightO = rightOrders[r];
 
-                      {/* Part 2 (Right Table) */}
-                      {rightOrders.length > 0 && (
-                        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-2xs">
-                          <table className="w-full text-left text-xs border-collapse">
-                            <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[10.5px] border-b border-slate-200">
-                              <tr>
-                                <th className="py-2.5 px-2.5 w-10 text-center">#</th>
-                                <th className="py-2.5 px-3">Student Name</th>
-                                <th className="py-2.5 px-2.5 text-center w-20">Weight</th>
-                                <th className="py-2.5 px-3 text-center w-36">Tracking ID (AWB)</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-150">
-                              {rightOrders.map((order, idx) => (
-                                <tr key={order.id || idx} className="hover:bg-slate-50 transition-colors">
-                                  <td className="py-2 px-2.5 text-center font-bold text-slate-500">{half + idx + 1}</td>
-                                  <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[180px]" title={order.studentName}>
-                                    {order.studentName}
+                          return (
+                            <tr key={r} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-2 px-2.5 text-center font-bold text-slate-500">{r + 1}</td>
+                              <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[170px]" title={leftO.studentName}>
+                                {leftO.studentName}
+                              </td>
+                              <td className="py-2 px-2 text-center font-semibold text-slate-800">
+                                {leftO.weight ? (
+                                  <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                                    {leftO.weight}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400">-</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 font-mono font-bold text-slate-900 text-center text-[11px] border-r-2 border-slate-300">
+                                {leftO.trackingId || '-'}
+                              </td>
+
+                              {rightO ? (
+                                <>
+                                  <td className="py-2 px-2.5 text-center font-bold text-slate-500">{half + r + 1}</td>
+                                  <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[170px]" title={rightO.studentName}>
+                                    {rightO.studentName}
                                   </td>
-                                  <td className="py-2 px-2.5 text-center font-semibold text-slate-800">
-                                    {order.weight ? (
+                                  <td className="py-2 px-2 text-center font-semibold text-slate-800">
+                                    {rightO.weight ? (
                                       <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
-                                        {order.weight}
+                                        {rightO.weight}
                                       </span>
                                     ) : (
                                       <span className="text-slate-400">-</span>
                                     )}
                                   </td>
                                   <td className="py-2 px-3 font-mono font-bold text-slate-900 text-center text-[11px]">
-                                    {order.trackingId || '-'}
+                                    {rightO.trackingId || '-'}
                                   </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                    </div>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-2 px-2.5"></td>
+                                  <td className="py-2 px-3"></td>
+                                  <td className="py-2 px-2"></td>
+                                  <td className="py-2 px-3"></td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
 
                   {/* Dedicated 2 Signatures Block for this Courier */}
