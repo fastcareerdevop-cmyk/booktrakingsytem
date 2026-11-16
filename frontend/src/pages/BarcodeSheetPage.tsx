@@ -1603,35 +1603,40 @@ export const BarcodeSheetPage: React.FC = () => {
                       <td className="py-2.5 px-3 text-right whitespace-nowrap action-cell">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
+                            type="button"
                             onClick={() => setWhatsAppModalOrder(order)}
-                            className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded shadow-2xs transition-colors cursor-pointer"
+                            className="w-7 h-7 flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded shadow-2xs transition-colors cursor-pointer shrink-0"
                             title="WhatsApp message bhejein / dobara bhejein"
+                            aria-label="Send WhatsApp"
                           >
-                            <MessageSquare size={12} />
-                            <span>WhatsApp</span>
+                            <MessageSquare size={13} />
                           </button>
                           {isAdmin && (
                             <button
+                              type="button"
                               onClick={() => handleOpenEditModal(order)}
-                              className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                              className="w-7 h-7 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 shadow-2xs transition-colors cursor-pointer shrink-0"
                               title="Edit student & order details (PIN Protected)"
+                              aria-label="Edit student & order details"
                             >
-                              <Edit2 size={12} />
-                              <span>Edit</span>
+                              <Edit2 size={13} />
                             </button>
                           )}
                           <button
+                            type="button"
                             onClick={() => openDispatchForOrder(order)}
-                            className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded shadow-2xs transition-colors cursor-pointer"
+                            className="h-7 inline-flex items-center gap-1 text-xs font-bold px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded shadow-2xs transition-colors cursor-pointer"
                             title="Scan & verify books for this student"
                           >
                             <Zap size={12} />
                             <span>Dispatch</span>
                           </button>
                           <button
+                            type="button"
                             onClick={() => handlePrintSingleSlip(order)}
-                            className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded border border-slate-200 transition-colors"
+                            className="w-7 h-7 flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded border border-slate-200 transition-colors cursor-pointer shrink-0"
                             title="Print Parcel Slip for this student"
+                            aria-label={`Print ${order.studentName} barcode`}
                           >
                             <Printer size={13} />
                           </button>
@@ -1743,31 +1748,32 @@ export const BarcodeSheetPage: React.FC = () => {
                   }`}>
                     {order.status === 'COMPLETED' ? 'Completed' : 'Pending'}
                   </span>
-                  <div className="flex items-center gap-1 flex-wrap">
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setWhatsAppModalOrder(order)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded cursor-pointer shadow-2xs transition-colors"
+                      className="w-7 h-7 flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white rounded cursor-pointer shadow-2xs transition-colors shrink-0"
                       title="WhatsApp message bhejein / dobara bhejein"
+                      aria-label="Send WhatsApp"
                     >
-                      <MessageSquare size={12} />
-                      <span>WhatsApp</span>
+                      <MessageSquare size={13} />
                     </button>
                     {isAdmin && (
                       <button
                         type="button"
                         onClick={() => handleOpenEditModal(order)}
-                        className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 cursor-pointer shadow-2xs transition-colors"
+                        className="w-7 h-7 flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 cursor-pointer shadow-2xs transition-colors shrink-0"
                         title="Edit student/order details (PIN Protected)"
+                        aria-label="Edit student/order details"
                       >
-                        <Edit2 size={12} />
-                        <span>Edit</span>
+                        <Edit2 size={13} />
                       </button>
                     )}
                     <button
                       type="button"
                       onClick={() => openDispatchForOrder(order)}
-                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded cursor-pointer shadow-2xs transition-colors"
+                      className="h-7 inline-flex items-center gap-1 text-[11px] font-bold px-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded cursor-pointer shadow-2xs transition-colors"
+                      title="Scan & verify books for this student"
                     >
                       <Zap size={12} />
                       <span>Dispatch</span>
@@ -1775,7 +1781,8 @@ export const BarcodeSheetPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handlePrintSingleSlip(order)}
-                      className="p-1 text-slate-600 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer"
+                      className="w-7 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-100 rounded border border-slate-200 cursor-pointer transition-colors shrink-0"
+                      title={`Print ${order.studentName} barcode slip`}
                       aria-label={`Print ${order.studentName} barcode`}
                     >
                       <Printer size={13} />
