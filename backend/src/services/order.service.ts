@@ -494,70 +494,81 @@ export async function getBarcodeSheetData(params: {
   endDate?: string;
   status?: string;
 }) {
-  const query: any = {};
+  const andClauses: any[] = [];
   if (params.batchId) {
     const mongoose = require('mongoose');
-    query.importBatchId = new mongoose.Types.ObjectId(params.batchId);
+    andClauses.push({ importBatchId: new mongoose.Types.ObjectId(params.batchId) });
   }
   if (params.date) {
     const start = new Date(params.date);
     start.setHours(0, 0, 0, 0);
     const end = new Date(params.date);
     end.setHours(23, 59, 59, 999);
-    query.createdAt = { $gte: start, $lte: end };
+    andClauses.push({ createdAt: { $gte: start, $lte: end } });
   } else if (params.startDate || params.endDate) {
-    query.createdAt = {};
+    const dateQuery: any = {};
     if (params.startDate) {
       const s = new Date(params.startDate);
       s.setHours(0, 0, 0, 0);
-      query.createdAt.$gte = s;
+      dateQuery.$gte = s;
     }
     if (params.endDate) {
       const e = new Date(params.endDate);
       e.setHours(23, 59, 59, 999);
-      query.createdAt.$lte = e;
+      dateQuery.$lte = e;
     }
+    andClauses.push({ createdAt: dateQuery });
   }
   if (params.courier && params.courier !== 'ALL') {
     const courierParam = params.courier.trim();
     if (courierParam.toLowerCase() === 'trackon') {
-      query.$or = [
-        { courierName: /track[ou]n/i },
-        { trackingId: /^50\d+/ },
-      ];
+      andClauses.push({
+        $or: [
+          { courierName: /track[ou]n/i },
+          { trackingId: /^50\d+/ },
+        ],
+      });
     } else if (courierParam.toLowerCase() === 'dtdc') {
-      query.$or = [
-        { courierName: /dtdc/i },
-        { trackingId: /^[DZBK]\d+/i },
-        { $and: [{ courierName: { $in: ['', null] } }, { trackingId: { $not: /^50\d+/ } }, { trackingId: { $not: /IN$/i } }] },
-      ];
+      andClauses.push({
+        $or: [
+          { courierName: /dtdc/i },
+          { trackingId: /^[DZBK]\d+/i },
+          { $and: [{ courierName: { $in: ['', null] } }, { trackingId: { $not: /^50\d+/ } }, { trackingId: { $not: /IN$/i } }] },
+        ],
+      });
     } else if (courierParam.toLowerCase() === 'india post' || courierParam.toLowerCase() === 'indiapost') {
-      query.$or = [
-        { courierName: /india\s*post|speed\s*post|\bpost\b/i },
-        { trackingId: /IN$/i },
-      ];
+      andClauses.push({
+        $or: [
+          { courierName: /india\s*post|speed\s*post|\bpost\b/i },
+          { trackingId: /IN$/i },
+        ],
+      });
     } else {
       const escapedCourier = courierParam.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      query.courierName = new RegExp(`^${escapedCourier}$`, 'i');
+      andClauses.push({ courierName: new RegExp(`^${escapedCourier}$`, 'i') });
     }
   }
   if (params.search) {
     const escapedSearch = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escapedSearch, 'i');
-    query.$or = [
-      { orderCode: regex },
-      { studentName: regex },
-      { trackingId: regex },
-      { courierName: regex },
-      { email: regex },
-      { productCode: regex },
-      { mobileNumber: regex },
-      { 'items.productCode': regex },
-      { 'items.productName': regex },
-      { 'items.bookCode': regex },
-      { 'items.bookName': regex },
-    ];
+    andClauses.push({
+      $or: [
+        { orderCode: regex },
+        { studentName: regex },
+        { trackingId: regex },
+        { courierName: regex },
+        { email: regex },
+        { productCode: regex },
+        { mobileNumber: regex },
+        { 'items.productCode': regex },
+        { 'items.productName': regex },
+        { 'items.bookCode': regex },
+        { 'items.bookName': regex },
+      ],
+    });
   }
+
+  const query = andClauses.length > 0 ? { $and: andClauses } : {};
 
   const orders = await Order.find(query)
     .select('orderCode productCode studentName mobileNumber email trackingId weight city address courierName courierTrackingUrl items createdAt')

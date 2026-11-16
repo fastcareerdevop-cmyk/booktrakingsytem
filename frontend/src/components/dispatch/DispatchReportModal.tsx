@@ -22,20 +22,40 @@ interface DispatchReportModalProps {
   initialCourier?: string;
 }
 
+// Helper to determine normalized courier name from explicit field or tracking number pattern
+export const getResolvedCourier = (order: any): string => {
+  const c = (order.courierName || '').trim();
+  if (c) {
+    const lower = c.toLowerCase();
+    if (lower.includes('trackon') || lower.includes('track on')) return 'Trackon';
+    if (lower.includes('india post') || lower.includes('indiapost') || lower.includes('speed post') || lower === 'post') return 'India Post';
+    if (lower.includes('dtdc')) return 'DTDC';
+    if (lower.includes('delhivery')) return 'Delhivery';
+    return c;
+  }
+  const track = (order.trackingId || '').trim().toUpperCase();
+  if (/^50\d+/.test(track)) return 'Trackon';
+  if (/IN$/.test(track)) return 'India Post';
+  if (/^[DZBK]\d+/i.test(track) || /^D\d+/i.test(track)) return 'DTDC';
+  return 'DTDC';
+};
+
 export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
   isOpen,
   onClose,
   initialCourier = 'ALL',
 }) => {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [selectedCourier, setSelectedCourier] = useState(initialCourier);
+  const [selectedCourier, setSelectedCourier] = useState(initialCourier || 'ALL');
   const [filterSearch, setFilterSearch] = useState('');
   const [onlyCompleted, setOnlyCompleted] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch report data whenever modal opens or filters change
+  const wasOpenRef = React.useRef(false);
+
+  // Fetch report data for the selected date
   const fetchReportData = async () => {
     if (!isOpen) return;
     setIsLoading(true);
@@ -43,7 +63,6 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
     try {
       const res = await api.get('/orders/barcode-sheet', {
         params: {
-          courier: selectedCourier !== 'ALL' ? selectedCourier : undefined,
           date: selectedDate || undefined,
         },
       });
@@ -57,29 +76,55 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
     }
   };
 
+  // Sync initialCourier and fetch data only when modal transitions from closed to open
   useEffect(() => {
-    if (isOpen) {
-      setSelectedCourier(initialCourier);
+    if (isOpen && !wasOpenRef.current) {
+      setSelectedCourier(initialCourier || 'ALL');
       fetchReportData();
     }
-  }, [isOpen, selectedDate, selectedCourier]);
+    wasOpenRef.current = isOpen;
+  }, [isOpen, initialCourier]);
 
-  // Filtered orders list
+  // Re-fetch data if date changes while modal is open
+  useEffect(() => {
+    if (isOpen && wasOpenRef.current) {
+      fetchReportData();
+    }
+  }, [selectedDate]);
+
+  // Available couriers detected from loaded orders
+  const availableCouriers = useMemo(() => {
+    const set = new Set<string>(['Trackon', 'DTDC', 'India Post', 'Delhivery']);
+    orders.forEach((o) => {
+      const c = getResolvedCourier(o);
+      if (c && c !== 'Unassigned') set.add(c);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [orders]);
+
+  // Filtered orders list (matches courier, status, and search)
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
-      // Completed filter
+      // 1. Courier filter
+      if (selectedCourier !== 'ALL') {
+        const resolved = getResolvedCourier(o).toUpperCase();
+        const target = selectedCourier.toUpperCase();
+        if (resolved !== target) return false;
+      }
+
+      // 2. Completed / Dispatched filter
       if (onlyCompleted && o.status && o.status !== 'COMPLETED' && o.dispatchedQuantity === 0) {
         const hasDispatched = (o.items || []).some((it: any) => (it.dispatchedQuantity || 0) > 0);
         if (!hasDispatched) return false;
       }
 
-      // Search filter
+      // 3. Search filter
       if (filterSearch.trim()) {
         const query = filterSearch.toLowerCase().trim();
         const studentMatch = (o.studentName || '').toLowerCase().includes(query);
         const trackingMatch = (o.trackingId || '').toLowerCase().includes(query);
         const cityMatch = (o.city || '').toLowerCase().includes(query);
-        const courierMatch = (o.courierName || '').toLowerCase().includes(query);
+        const courierMatch = (o.courierName || getResolvedCourier(o)).toLowerCase().includes(query);
         const productMatch = (o.productCode || '').toLowerCase().includes(query);
         const bookMatch = (o.items || []).some(
           (it: any) =>
@@ -93,16 +138,30 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
 
       return true;
     });
-  }, [orders, onlyCompleted, filterSearch]);
+  }, [orders, onlyCompleted, filterSearch, selectedCourier]);
 
-  // Overall Statistics
+  // Courier counts across all loaded orders for that date (for top badge filters)
+  const allCourierCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    orders.forEach((o) => {
+      if (onlyCompleted && o.status && o.status !== 'COMPLETED' && o.dispatchedQuantity === 0) {
+        const hasDispatched = (o.items || []).some((it: any) => (it.dispatchedQuantity || 0) > 0);
+        if (!hasDispatched) return;
+      }
+      const c = getResolvedCourier(o);
+      counts[c] = (counts[c] || 0) + 1;
+    });
+    return counts;
+  }, [orders, onlyCompleted]);
+
+  // Overall Statistics for currently filtered view
   const stats = useMemo(() => {
     let totalWeightKg = 0;
     let totalItems = 0;
     const courierCounts: Record<string, number> = {};
 
     filteredOrders.forEach((o) => {
-      const cName = o.courierName || 'Unassigned';
+      const cName = getResolvedCourier(o);
       courierCounts[cName] = (courierCounts[cName] || 0) + 1;
 
       if (o.weight) {
@@ -129,7 +188,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
   const courierGroups = useMemo(() => {
     const groups: { [key: string]: any[] } = {};
     filteredOrders.forEach((order) => {
-      const courier = (order.courierName || 'Unassigned').trim();
+      const courier = getResolvedCourier(order);
       if (!groups[courier]) groups[courier] = [];
       groups[courier].push(order);
     });
@@ -235,7 +294,8 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Dispatch Manifest');
 
-    const fileName = `Dispatch_Report_${manifestDate}.xlsx`;
+    const courierSuffix = selectedCourier !== 'ALL' ? `_${selectedCourier.replace(/\s+/g, '_')}` : '';
+    const fileName = `Dispatch_Report_${manifestDate}${courierSuffix}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
 
@@ -481,6 +541,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
                 <div class="doc-title">Courier Dispatch Manifest</div>
                 <div class="meta-pill">
                   Date: <strong>${manifestDate}</strong> &nbsp;|&nbsp;
+                  ${selectedCourier !== 'ALL' ? `Courier: <strong>${escapeHtml(selectedCourier)}</strong> &nbsp;|&nbsp; ` : ''}
                   Total Parcels: <strong>${filteredOrders.length}</strong>
                   ${stats.totalWeightKg ? `&nbsp;|&nbsp; Total Weight: <strong>${stats.totalWeightKg} KG</strong>` : ''}
                 </div>
@@ -569,10 +630,11 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
                 className="text-xs font-bold text-slate-800 focus:outline-none bg-transparent cursor-pointer pr-1"
               >
                 <option value="ALL">All Couriers (सभी कूरियर)</option>
-                <option value="Trackon">Trackon</option>
-                <option value="India Post">India Post</option>
-                <option value="DTDC">DTDC</option>
-                <option value="Delhivery">Delhivery</option>
+                {availableCouriers.map((c) => (
+                  <option key={c} value={c}>
+                    {c} {allCourierCounts[c] ? `(${allCourierCounts[c]})` : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -653,14 +715,31 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {Object.entries(stats.courierCounts).map(([courier, count]) => (
-              <span
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              onClick={() => setSelectedCourier('ALL')}
+              className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                selectedCourier === 'ALL'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'bg-white border border-red-200 text-red-800 hover:bg-red-100/60'
+              }`}
+              title="Show all couriers"
+            >
+              All: {orders.length}
+            </button>
+            {Object.entries(allCourierCounts).map(([courier, count]) => (
+              <button
                 key={courier}
-                className="bg-white border border-red-200 text-red-800 px-2 py-0.5 rounded-md font-bold text-[11px] shadow-2xs"
+                onClick={() => setSelectedCourier(courier)}
+                className={`px-2.5 py-1 rounded-lg font-bold text-xs transition-all cursor-pointer ${
+                  selectedCourier.toUpperCase() === courier.toUpperCase()
+                    ? 'bg-red-600 text-white shadow-xs'
+                    : 'bg-white border border-red-200 text-red-800 hover:bg-red-100/60'
+                }`}
+                title={`Filter only ${courier} orders`}
               >
                 {courier}: {count}
-              </span>
+              </button>
             ))}
           </div>
         </div>
