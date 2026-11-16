@@ -164,7 +164,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
     });
   }, [filteredOrders]);
 
-  // Export to Excel (.xlsx) - Grouped by Courier with 4 Columns & 2 Signatures
+  // Export to Excel (.xlsx) - Grouped by Courier in 2 Parts Side-by-Side with Signatures
   const handleExportExcel = () => {
     if (courierGroups.length === 0 || filteredOrders.length === 0) {
       alert('No dispatch orders available to export.');
@@ -175,33 +175,57 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
     const sheetRows: any[] = [];
 
     // Main Title Header
-    sheetRows.push({ 'S.No': 'FAST (FIRST ATTEMPT SUCCESS TUTORIALS) - DISPATCH MANIFEST' });
+    sheetRows.push({ '# (1)': 'FAST (FIRST ATTEMPT SUCCESS TUTORIALS) - DISPATCH MANIFEST' });
     sheetRows.push({
-      'S.No': `Date: ${manifestDate} | Total Parcels: ${filteredOrders.length} | Total Weight: ${stats.totalWeightKg ? stats.totalWeightKg + ' KG' : 'N/A'}`
+      '# (1)': `Date: ${manifestDate} | Total Parcels: ${filteredOrders.length} | Total Weight: ${stats.totalWeightKg ? stats.totalWeightKg + ' KG' : 'N/A'}`
     });
     sheetRows.push({});
 
     courierGroups.forEach((group) => {
       sheetRows.push({
-        'S.No': `=== COURIER: ${group.courierName.toUpperCase()} (${group.totalParcels} Parcels${group.totalWeightKg ? ` | ${group.totalWeightKg} KG` : ''}) ===`
+        '# (1)': `=== COURIER: ${group.courierName.toUpperCase()} (${group.totalParcels} Parcels${group.totalWeightKg ? ` | ${group.totalWeightKg} KG` : ''}) ===`
       });
 
-      group.orders.forEach((o, idx) => {
-        sheetRows.push({
-          'S.No': idx + 1,
-          'Student Name': o.studentName || '-',
-          'Weight': o.weight ? String(o.weight).trim() : '-',
-          'Tracking ID (AWB)': o.trackingId || '-',
-        });
+      const half = Math.ceil(group.orders.length / 2);
+      const leftOrders = group.orders.slice(0, half);
+      const rightOrders = group.orders.slice(half);
+
+      sheetRows.push({
+        '# (1)': '#',
+        'Student Name (1)': 'Student Name',
+        'Weight (1)': 'Weight',
+        'Tracking ID (1)': 'Tracking ID (AWB)',
+        '|': '|',
+        '# (2)': '#',
+        'Student Name (2)': 'Student Name',
+        'Weight (2)': 'Weight',
+        'Tracking ID (2)': 'Tracking ID (AWB)',
       });
+
+      for (let r = 0; r < half; r++) {
+        const leftO = leftOrders[r];
+        const rightO = rightOrders[r];
+        sheetRows.push({
+          '# (1)': r + 1,
+          'Student Name (1)': leftO ? (leftO.studentName || '-') : '',
+          'Weight (1)': leftO ? (leftO.weight ? String(leftO.weight).trim() : '-') : '',
+          'Tracking ID (1)': leftO ? (leftO.trackingId || '-') : '',
+          '|': '|',
+          '# (2)': rightO ? (half + r + 1) : '',
+          'Student Name (2)': rightO ? (rightO.studentName || '-') : '',
+          'Weight (2)': rightO ? (rightO.weight ? String(rightO.weight).trim() : '-') : '',
+          'Tracking ID (2)': rightO ? (rightO.trackingId || '-') : '',
+        });
+      }
 
       // Signature block for this courier
       sheetRows.push({});
       sheetRows.push({
-        'S.No': '2. DISPATCHED / HANDED OVER BY',
-        'Student Name': 'Signature: __________________________',
-        'Weight': '3. RECEIVED BY COURIER PERSON',
-        'Tracking ID (AWB)': 'Signature & Stamp: __________________',
+        '# (1)': '2. DISPATCHED / HANDED OVER BY',
+        'Student Name (1)': 'Signature: __________________________',
+        '|': '',
+        '# (2)': '3. RECEIVED BY COURIER PERSON',
+        'Student Name (2)': 'Signature & Stamp: __________________',
       });
       sheetRows.push({});
       sheetRows.push({});
@@ -215,7 +239,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
     XLSX.writeFile(workbook, fileName);
   };
 
-  // Print Manifest (Clean A4 Letterhead, Courier Grouped, 4 Columns, 2 Signatures per Courier)
+  // Print Manifest (Clean A4 Letterhead, 2 Parts Side-by-Side to eliminate blank space, 2 Signatures per Courier)
   const handlePrintManifest = () => {
     if (courierGroups.length === 0 || filteredOrders.length === 0) {
       alert('No dispatch orders available to print.');
@@ -232,16 +256,24 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
 
     const courierSectionsHtml = courierGroups
       .map((group) => {
-        const rowsHtml = group.orders
-          .map((o, idx) => `
-            <tr>
-              <td style="text-align: center; font-weight: bold; width: 45px;">${idx + 1}</td>
-              <td style="font-weight: bold; color: #0f172a;">${escapeHtml(o.studentName || '-')}</td>
-              <td style="text-align: center; font-weight: 600; width: 90px;">${escapeHtml(o.weight || '-')}</td>
-              <td style="font-family: monospace; font-weight: bold; text-align: center; width: 170px;">${escapeHtml(o.trackingId || '-')}</td>
-            </tr>
-          `)
-          .join('');
+        const half = Math.ceil(group.orders.length / 2);
+        const leftOrders = group.orders.slice(0, half);
+        const rightOrders = group.orders.slice(half);
+
+        const renderRows = (orderList: any[], startIndex: number) =>
+          orderList
+            .map((o, i) => `
+              <tr>
+                <td style="text-align: center; font-weight: bold; width: 32px; padding: 5px 4px;">${startIndex + i + 1}</td>
+                <td style="font-weight: 700; color: #0f172a; padding: 5px 6px; font-size: 11px;">${escapeHtml(o.studentName || '-')}</td>
+                <td style="text-align: center; font-weight: 600; width: 55px; padding: 5px 4px;">${escapeHtml(o.weight || '-')}</td>
+                <td style="font-family: monospace; font-weight: bold; text-align: center; width: 135px; padding: 5px 6px; font-size: 11px;">${escapeHtml(o.trackingId || '-')}</td>
+              </tr>
+            `)
+            .join('');
+
+        const leftRowsHtml = renderRows(leftOrders, 0);
+        const rightRowsHtml = renderRows(rightOrders, half);
 
         return `
           <div class="courier-section">
@@ -250,20 +282,48 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
               <span class="courier-meta">${group.totalParcels} Parcels ${group.totalWeightKg ? `| Total Weight: ${group.totalWeightKg} KG` : ''}</span>
             </div>
 
-            <table class="manifest-table">
-              <thead>
-                <tr>
-                  <th style="width: 45px; text-align: center;">#</th>
-                  <th>STUDENT NAME</th>
-                  <th style="width: 90px; text-align: center;">WEIGHT</th>
-                  <th style="width: 170px; text-align: center;">TRACKING ID (AWB)</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rowsHtml}
-              </tbody>
-            </table>
+            <!-- Dual Side-by-Side Tables -->
+            <div class="dual-tables-grid">
+              
+              <!-- Part 1 (Left Column) -->
+              <div class="dual-col">
+                <table class="manifest-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 32px; text-align: center;">#</th>
+                      <th>STUDENT NAME</th>
+                      <th style="width: 55px; text-align: center;">WT</th>
+                      <th style="width: 135px; text-align: center;">TRACKING ID (AWB)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${leftRowsHtml}
+                  </tbody>
+                </table>
+              </div>
 
+              <!-- Part 2 (Right Column) -->
+              ${rightOrders.length > 0 ? `
+                <div class="dual-col">
+                  <table class="manifest-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 32px; text-align: center;">#</th>
+                        <th>STUDENT NAME</th>
+                        <th style="width: 55px; text-align: center;">WT</th>
+                        <th style="width: 135px; text-align: center;">TRACKING ID (AWB)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${rightRowsHtml}
+                    </tbody>
+                  </table>
+                </div>
+              ` : ''}
+
+            </div>
+
+            <!-- 2-Party Signature Box for this Courier -->
             <div class="signatures-box">
               <div class="sig-col">
                 <div class="sig-role">2. DISPATCHED / HANDED OVER BY</div>
@@ -287,7 +347,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
         <style>
           @page {
             size: A4 portrait;
-            margin: 10mm 10mm 12mm 10mm;
+            margin: 8mm 8mm 10mm 8mm;
           }
           * {
             box-sizing: border-box;
@@ -295,31 +355,31 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           }
           body {
             margin: 0;
-            padding: 16px;
+            padding: 12px;
             color: #1e293b;
             background: #fff;
-            font-size: 12px;
+            font-size: 11px;
           }
           .header-table {
             width: 100%;
             border-bottom: 2.5px solid #dc2626;
-            padding-bottom: 8px;
-            margin-bottom: 16px;
+            padding-bottom: 6px;
+            margin-bottom: 12px;
           }
           .brand-title {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 900;
             color: #dc2626;
             letter-spacing: -0.5px;
             line-height: 1.1;
           }
           .brand-sub {
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 600;
             color: #64748b;
           }
           .doc-title {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 800;
             color: #0f172a;
             text-transform: uppercase;
@@ -328,34 +388,44 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           .meta-pill {
             display: inline-block;
             background: #f1f5f9;
-            padding: 4px 10px;
+            padding: 3px 8px;
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 700;
-            margin-top: 4px;
+            margin-top: 3px;
           }
           .courier-section {
-            margin-bottom: 26px;
+            margin-bottom: 20px;
             page-break-inside: avoid;
           }
           .courier-banner {
             background: #0f172a;
             color: #fff;
-            padding: 6px 12px;
+            padding: 5px 10px;
             border-radius: 4px 4px 0 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
           }
           .courier-title {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 800;
             letter-spacing: 0.5px;
           }
           .courier-meta {
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 600;
             color: #cbd5e1;
+          }
+          .dual-tables-grid {
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            width: 100%;
+          }
+          .dual-col {
+            flex: 1;
+            min-width: 0;
           }
           .manifest-table {
             width: 100%;
@@ -365,26 +435,26 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
             background: #f8fafc;
             color: #334155;
             font-weight: 700;
-            font-size: 11px;
+            font-size: 10px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             border: 1px solid #cbd5e1;
-            padding: 7px 10px;
+            padding: 5px 6px;
           }
           .manifest-table td {
             border: 1px solid #cbd5e1;
-            padding: 6px 10px;
-            font-size: 11.5px;
+            padding: 4px 6px;
+            font-size: 10.5px;
             vertical-align: middle;
           }
           .manifest-table tr:nth-child(even) {
             background-color: #f8fafc;
           }
           .signatures-box {
-            margin-top: 14px;
+            margin-top: 10px;
             border: 1.5px solid #cbd5e1;
-            border-radius: 6px;
-            padding: 14px 18px;
+            border-radius: 4px;
+            padding: 10px 14px;
             background: #fafafa;
             display: flex;
             justify-content: space-between;
@@ -395,13 +465,13 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           }
           .sig-role {
             font-weight: 800;
-            font-size: 11px;
+            font-size: 10.5px;
             color: #0f172a;
             text-transform: uppercase;
-            margin-bottom: 14px;
+            margin-bottom: 10px;
           }
           .sig-line {
-            font-size: 11px;
+            font-size: 10.5px;
             font-weight: 600;
             color: #334155;
           }
@@ -433,7 +503,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
 
         ${courierSectionsHtml}
 
-        <div style="margin-top: 16px; font-size: 9px; color: #94a3b8; text-align: center;">
+        <div style="margin-top: 14px; font-size: 9px; color: #94a3b8; text-align: center;">
           Manifest Generated by FAST Book Tracking System on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
         </div>
 
@@ -457,7 +527,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
         
         {/* Modal Top Header */}
         <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-red-600 to-rose-700 text-white flex items-center justify-between">
@@ -470,7 +540,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
                 Courier Dispatch Report & Manifest (डिस्पैच रिपोर्ट)
               </h2>
               <p className="text-xs text-red-100 font-medium">
-                Courier-wise grouped manifest, 4 clean columns, with handover signatures
+                2-part side-by-side view to eliminate blank space, grouped by courier with handover signatures
               </p>
             </div>
           </div>
@@ -607,7 +677,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           </div>
         </div>
 
-        {/* Table Content Area: Courier-wise Flow */}
+        {/* Table Content Area: Courier-wise Flow in 2 Parts Side-by-Side */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {isLoading ? (
             <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
@@ -625,88 +695,141 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
               <p className="text-xs text-slate-400 mt-1">Try changing the date or courier filter to view earlier orders.</p>
             </div>
           ) : (
-            courierGroups.map((group) => (
-              <div key={group.courierName} className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs bg-white">
-                
-                {/* Courier Header Bar */}
-                <div className="px-4 py-2.5 bg-slate-900 text-white flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-red-400" />
-                    <span className="font-bold text-sm tracking-wide uppercase">
-                      Courier: {group.courierName}
-                    </span>
-                  </div>
-                  <div className="text-xs text-slate-300 font-semibold">
-                    <span>{group.totalParcels} Parcels</span>
-                    {group.totalWeightKg && (
-                      <span className="ml-2 pl-2 border-l border-slate-700">
-                        Total Weight: {group.totalWeightKg} KG
+            courierGroups.map((group) => {
+              const half = Math.ceil(group.orders.length / 2);
+              const leftOrders = group.orders.slice(0, half);
+              const rightOrders = group.orders.slice(half);
+
+              return (
+                <div key={group.courierName} className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs bg-white">
+                  
+                  {/* Courier Header Bar */}
+                  <div className="px-4 py-2.5 bg-slate-900 text-white flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-red-400" />
+                      <span className="font-bold text-sm tracking-wide uppercase">
+                        Courier: {group.courierName}
                       </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* 4-Column Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-200">
-                      <tr>
-                        <th className="py-2.5 px-3 w-12 text-center">#</th>
-                        <th className="py-2.5 px-3">Student Name</th>
-                        <th className="py-2.5 px-3 text-center w-28">Weight</th>
-                        <th className="py-2.5 px-3 w-48 text-center">Tracking ID (AWB)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-150">
-                      {group.orders.map((order, idx) => (
-                        <tr key={order.id || idx} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-2.5 px-3 text-center font-bold text-slate-500">{idx + 1}</td>
-                          <td className="py-2.5 px-3 font-bold text-slate-900">{order.studentName}</td>
-                          <td className="py-2.5 px-3 text-center font-semibold text-slate-800">
-                            {order.weight ? (
-                              <span className="bg-slate-100 px-2 py-0.5 rounded text-[11px]">
-                                {order.weight}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-slate-900 text-center">
-                            {order.trackingId || '-'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Dedicated 2 Signatures Block for this Courier */}
-                <div className="p-4 bg-slate-50 border-t border-slate-200">
-                  <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5">
-                    Courier Handover & Verification: {group.courierName}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-                      <div className="text-xs font-black text-slate-900 uppercase">
-                        2. DISPATCHED / HANDED OVER BY
-                      </div>
-                      <div className="mt-3 pt-2 border-t border-dashed border-slate-300 text-xs text-slate-500 font-medium">
-                        Signature: __________________________
-                      </div>
                     </div>
-                    <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
-                      <div className="text-xs font-black text-slate-900 uppercase">
-                        3. RECEIVED BY COURIER PERSON
-                      </div>
-                      <div className="mt-3 pt-2 border-t border-dashed border-slate-300 text-xs text-slate-500 font-medium">
-                        Signature & Stamp: __________________
-                      </div>
+                    <div className="text-xs text-slate-300 font-semibold">
+                      <span>{group.totalParcels} Parcels</span>
+                      {group.totalWeightKg && (
+                        <span className="ml-2 pl-2 border-l border-slate-700">
+                          Total Weight: {group.totalWeightKg} KG
+                        </span>
+                      )}
                     </div>
                   </div>
-                </div>
 
-              </div>
-            ))
+                  {/* 2-Part Side-by-Side Tables to eliminate blank space */}
+                  <div className="p-3 bg-slate-50/50">
+                    <div className={`grid gap-3 items-start ${rightOrders.length > 0 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                      
+                      {/* Part 1 (Left Table) */}
+                      <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-2xs">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[10.5px] border-b border-slate-200">
+                            <tr>
+                              <th className="py-2.5 px-2.5 w-10 text-center">#</th>
+                              <th className="py-2.5 px-3">Student Name</th>
+                              <th className="py-2.5 px-2.5 text-center w-20">Weight</th>
+                              <th className="py-2.5 px-3 text-center w-36">Tracking ID (AWB)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-150">
+                            {leftOrders.map((order, idx) => (
+                              <tr key={order.id || idx} className="hover:bg-slate-50 transition-colors">
+                                <td className="py-2 px-2.5 text-center font-bold text-slate-500">{idx + 1}</td>
+                                <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[180px]" title={order.studentName}>
+                                  {order.studentName}
+                                </td>
+                                <td className="py-2 px-2.5 text-center font-semibold text-slate-800">
+                                  {order.weight ? (
+                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                                      {order.weight}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400">-</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3 font-mono font-bold text-slate-900 text-center text-[11px]">
+                                  {order.trackingId || '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Part 2 (Right Table) */}
+                      {rightOrders.length > 0 && (
+                        <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-2xs">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[10.5px] border-b border-slate-200">
+                              <tr>
+                                <th className="py-2.5 px-2.5 w-10 text-center">#</th>
+                                <th className="py-2.5 px-3">Student Name</th>
+                                <th className="py-2.5 px-2.5 text-center w-20">Weight</th>
+                                <th className="py-2.5 px-3 text-center w-36">Tracking ID (AWB)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150">
+                              {rightOrders.map((order, idx) => (
+                                <tr key={order.id || idx} className="hover:bg-slate-50 transition-colors">
+                                  <td className="py-2 px-2.5 text-center font-bold text-slate-500">{half + idx + 1}</td>
+                                  <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[180px]" title={order.studentName}>
+                                    {order.studentName}
+                                  </td>
+                                  <td className="py-2 px-2.5 text-center font-semibold text-slate-800">
+                                    {order.weight ? (
+                                      <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                                        {order.weight}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">-</span>
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-3 font-mono font-bold text-slate-900 text-center text-[11px]">
+                                    {order.trackingId || '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                    </div>
+                  </div>
+
+                  {/* Dedicated 2 Signatures Block for this Courier */}
+                  <div className="p-4 bg-slate-50 border-t border-slate-200">
+                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2.5">
+                      Courier Handover & Verification: {group.courierName}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                        <div className="text-xs font-black text-slate-900 uppercase">
+                          2. DISPATCHED / HANDED OVER BY
+                        </div>
+                        <div className="mt-3 pt-2 border-t border-dashed border-slate-300 text-xs text-slate-500 font-medium">
+                          Signature: __________________________
+                        </div>
+                      </div>
+                      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                        <div className="text-xs font-black text-slate-900 uppercase">
+                          3. RECEIVED BY COURIER PERSON
+                        </div>
+                        <div className="mt-3 pt-2 border-t border-dashed border-slate-300 text-xs text-slate-500 font-medium">
+                          Signature & Stamp: __________________
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              );
+            })
           )}
         </div>
 
@@ -714,7 +837,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
         <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <UserCheck className="w-4 h-4 text-emerald-600" />
-            <span>Date & courier are grouped at top; 4 clean columns with separate handover signatures per courier.</span>
+            <span>2-part layout utilizes full page width without empty gaps and saves 50% paper on print.</span>
           </div>
 
           <div className="flex items-center gap-2">
