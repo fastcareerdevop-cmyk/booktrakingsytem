@@ -12,6 +12,7 @@ import { DateFilterSelect } from '../../components/common/DateFilterSelect';
 import { DispatchBoxModal } from '../../components/dispatch/DispatchBoxModal';
 import { StockDispatchHistoryModal } from '../../components/dispatch/StockDispatchHistoryModal';
 import { DispatchReportModal } from '../../components/dispatch/DispatchReportModal';
+import { SecurityPinModal } from '../../components/common/SecurityPinModal';
 import {
   Search,
   ArrowRight,
@@ -50,6 +51,20 @@ export const OutgoingOrdersPage2: React.FC = () => {
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
   const [isLoading, setIsLoading] = useState(true);
   const [isDispatchReportOpen, setIsDispatchReportOpen] = useState(false);
+
+  // Security PIN Modal State
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [pinPromptConfig, setPinPromptConfig] = useState<{
+    title: string;
+    description: string;
+    actionLabel: string;
+    onAuthorize: (pin: string) => Promise<void>;
+  }>({
+    title: 'Security Authorization Required',
+    description: 'Please enter the 4-digit Admin Security PIN.',
+    actionLabel: 'Verify PIN & Dispatch',
+    onAuthorize: async () => {},
+  });
 
   // Preparation & Warehouse Stock Split (Shelf vs Packaged)
   const [prepSummary, setPrepSummary] = useState({
@@ -378,7 +393,7 @@ export const OutgoingOrdersPage2: React.FC = () => {
     return () => clearInterval(focusTimer);
   }, [isDispatchBoxOpen, showPaytmSuccess]);
 
-  const handleGlobalScan = useCallback(async (code: string) => {
+  const handleGlobalScan = useCallback(async (code: string, pin?: string, isManual?: boolean) => {
     if (!code.trim() || isScanning || isScanningRef.current) return;
     const cleanCode = code.trim().toUpperCase();
     setScannerCode('');
@@ -440,6 +455,8 @@ export const OutgoingOrdersPage2: React.FC = () => {
       const res = await api.post('/dispatch/verify', {
         enteredCode: cleanCode,
         orderId: activeOrderId,
+        pin,
+        isManual,
       });
 
       if (res.data.success) {
@@ -550,6 +567,20 @@ export const OutgoingOrdersPage2: React.FC = () => {
         }
       }
     } catch (err: any) {
+      if (err.response?.data?.code === 'PIN_REQUIRED' || err.response?.data?.message?.includes('Security PIN is required')) {
+        const currentOrder = lastScannedOrderRef.current || lastScannedOrder;
+        setPinPromptConfig({
+          title: 'Admin Security PIN Required',
+          description: err.response?.data?.message || `Enter the 4-digit Admin Security PIN to verify "${cleanCode}".`,
+          actionLabel: 'Verify PIN & Dispatch',
+          onAuthorize: async (enteredPin: string) => {
+            await handleGlobalScan(cleanCode, enteredPin, true);
+          },
+        });
+        setIsPinModalOpen(true);
+        return;
+      }
+
       const errCode = err.response?.data?.code;
       const serverErrMsg = err.response?.data?.message || `Code "${cleanCode}" could not be verified. Please check barcode.`;
 
@@ -633,13 +664,29 @@ export const OutgoingOrdersPage2: React.FC = () => {
     };
   }, [stationSessionId, handleGlobalScan]);
 
-  const handleManualFinish = async () => {
+  const handleVerifyBookCodeWithPin = (codeToVerify: string) => {
+    if (!codeToVerify.trim() || isScanning || isScanningRef.current) return;
+    const currentOrder = lastScannedOrderRef.current || lastScannedOrder;
+    setPinPromptConfig({
+      title: 'Authorize Order Verification',
+      description: `Enter the 4-digit Admin Security PIN to verify "${codeToVerify}" for ${currentOrder?.studentName || 'Student'}.`,
+      actionLabel: 'Verify PIN & Dispatch',
+      onAuthorize: async (pin: string) => {
+        await handleGlobalScan(codeToVerify, pin, true);
+      },
+    });
+    setIsPinModalOpen(true);
+  };
+
+  const executeManualFinish = async (pin?: string) => {
     if (!lastScannedOrder?.id || isScanning) return;
     setIsScanning(true);
     try {
       const res = await api.post('/dispatch/verify', {
         action: 'MANUAL_FINISH_ORDER',
         orderId: lastScannedOrder.id,
+        pin,
+        isManual: true,
       });
       if (res.data.success) {
         if (soundEnabled) playSuccessChime();
@@ -684,13 +731,28 @@ export const OutgoingOrdersPage2: React.FC = () => {
     }
   };
 
-  const handleQuickDispatchAll = async () => {
+  const handleManualFinish = () => {
+    if (!lastScannedOrder?.id || isScanning) return;
+    setPinPromptConfig({
+      title: 'Authorize Partial Dispatch',
+      description: `Enter the 4-digit Admin Security PIN to finish partial dispatch for ${lastScannedOrder.studentName}.`,
+      actionLabel: 'Verify PIN & Dispatch',
+      onAuthorize: async (pin: string) => {
+        await executeManualFinish(pin);
+      },
+    });
+    setIsPinModalOpen(true);
+  };
+
+  const executeQuickDispatchAll = async (pin?: string) => {
     if (!lastScannedOrder?.id || isScanning) return;
     setIsScanning(true);
     try {
       const res = await api.post('/dispatch/verify', {
         action: 'QUICK_DISPATCH_ALL',
         orderId: lastScannedOrder.id,
+        pin,
+        isManual: true,
       });
       if (res.data.success) {
         if (soundEnabled) playOrderCompleteFanfare();
@@ -751,6 +813,19 @@ export const OutgoingOrdersPage2: React.FC = () => {
       setIsScanning(false);
       setTimeout(() => scanInputRef.current?.focus(), 50);
     }
+  };
+
+  const handleQuickDispatchAll = () => {
+    if (!lastScannedOrder?.id || isScanning) return;
+    setPinPromptConfig({
+      title: 'Authorize Quick Dispatch',
+      description: `Enter the 4-digit Admin Security PIN to quick-dispatch all remaining books for ${lastScannedOrder.studentName}.`,
+      actionLabel: 'Verify PIN & Dispatch All',
+      onAuthorize: async (pin: string) => {
+        await executeQuickDispatchAll(pin);
+      },
+    });
+    setIsPinModalOpen(true);
   };
 
   // Auto-trigger verification as soon as number/code is entered (no Enter click required)
@@ -1204,7 +1279,13 @@ export const OutgoingOrdersPage2: React.FC = () => {
             )}
           </div>
           <button
-            onClick={() => handleGlobalScan(scannerCode)}
+            onClick={() => {
+              if (lastScannedOrder && lastScannedOrder.totalPending > 0) {
+                handleVerifyBookCodeWithPin(scannerCode.trim());
+              } else {
+                handleGlobalScan(scannerCode.trim());
+              }
+            }}
             disabled={!scannerCode.trim() || isScanning}
             className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm font-medium flex items-center gap-1.5 shrink-0 cursor-pointer"
           >
@@ -1408,7 +1489,17 @@ export const OutgoingOrdersPage2: React.FC = () => {
 
                 {/* 3. SCAN OR TYPE BOOK CODE INPUT */}
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                  <form onSubmit={(e) => { e.preventDefault(); if (innerBookCode.trim()) { handleGlobalScan(innerBookCode); setInnerBookCode(''); } }} className="space-y-2">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (innerBookCode.trim()) {
+                        const code = innerBookCode.trim();
+                        setInnerBookCode('');
+                        handleVerifyBookCodeWithPin(code);
+                      }
+                    }}
+                    className="space-y-2"
+                  >
                     <div className="flex items-center justify-between">
                       <label
                         htmlFor="inner-book-code-input"
@@ -1482,7 +1573,7 @@ export const OutgoingOrdersPage2: React.FC = () => {
                               <button
                                 key={pCode}
                                 type="button"
-                                onClick={() => handleGlobalScan(pCode)}
+                                onClick={() => handleVerifyBookCodeWithPin(pCode)}
                                 className="font-mono text-[11px] font-semibold bg-white text-purple-700 border border-purple-200 hover:bg-purple-50 px-2 py-0.5 rounded transition-all cursor-pointer active:scale-95"
                                 title={`Verify Product ${pCode}`}
                               >
@@ -1502,7 +1593,7 @@ export const OutgoingOrdersPage2: React.FC = () => {
                             <button
                               key={item.id || item.bookCode}
                               type="button"
-                              onClick={() => handleGlobalScan(item.bookCode)}
+                              onClick={() => handleVerifyBookCodeWithPin(item.bookCode)}
                               className="font-mono text-[11px] font-medium bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
                               title={`Verify ${item.bookCode}`}
                             >
@@ -1600,7 +1691,7 @@ export const OutgoingOrdersPage2: React.FC = () => {
                               ) : (
                                 <button
                                   type="button"
-                                  onClick={() => handleGlobalScan(item.bookCode)}
+                                  onClick={() => handleVerifyBookCodeWithPin(item.bookCode)}
                                   className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 cursor-pointer transition-colors"
                                   title={`Verify ${item.bookCode}`}
                                 >
@@ -2088,6 +2179,16 @@ export const OutgoingOrdersPage2: React.FC = () => {
       <DispatchReportModal
         isOpen={isDispatchReportOpen}
         onClose={() => setIsDispatchReportOpen(false)}
+      />
+
+      {/* ─── Admin Security PIN Modal ─── */}
+      <SecurityPinModal
+        isOpen={isPinModalOpen}
+        onClose={() => setIsPinModalOpen(false)}
+        title={pinPromptConfig.title}
+        description={pinPromptConfig.description}
+        actionLabel={pinPromptConfig.actionLabel}
+        onSuccess={pinPromptConfig.onAuthorize}
       />
     </div>
   );
