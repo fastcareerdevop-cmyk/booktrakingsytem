@@ -327,23 +327,23 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
 
             return `
               <tr>
-                <td style="text-align: center; font-weight: bold; width: 28px; padding: 4px 2px;">${r + 1}</td>
-                <td style="font-weight: 700; color: #0f172a; padding: 4px 5px; font-size: 10.5px;">${escapeHtml(leftO ? leftO.studentName || '-' : '')}</td>
-                <td style="text-align: center; font-weight: 600; width: 48px; padding: 4px 2px;">${escapeHtml(leftO ? leftO.weight || '-' : '')}</td>
-                <td style="font-family: monospace; font-weight: bold; text-align: center; width: 125px; padding: 4px 4px; font-size: 10.5px; border-right: 2px solid #94a3b8;">${escapeHtml(leftO ? leftO.trackingId || '-' : '')}</td>
+                <td style="text-align: center; font-weight: 400; width: 26px; padding: 2.5px 2px; font-size: 8.5px; color: #475569;">${r + 1}</td>
+                <td style="font-weight: 400; color: #0f172a; padding: 2.5px 4px; font-size: 8.5px;">${escapeHtml(leftO ? leftO.studentName || '-' : '')}</td>
+                <td style="text-align: center; font-weight: 400; width: 44px; padding: 2.5px 2px; font-size: 8.5px; color: #334155;">${escapeHtml(leftO ? leftO.weight || '-' : '')}</td>
+                <td style="font-family: monospace; font-weight: 400; text-align: center; width: 120px; padding: 2.5px 3px; font-size: 8.5px; border-right: 2px solid #94a3b8; color: #0f172a;">${escapeHtml(leftO ? leftO.trackingId || '-' : '')}</td>
                 ${
                   rightO
                     ? `
-                  <td style="text-align: center; font-weight: bold; width: 28px; padding: 4px 2px;">${half + r + 1}</td>
-                  <td style="font-weight: 700; color: #0f172a; padding: 4px 5px; font-size: 10.5px;">${escapeHtml(rightO.studentName || '-')}</td>
-                  <td style="text-align: center; font-weight: 600; width: 48px; padding: 4px 2px;">${escapeHtml(rightO.weight || '-')}</td>
-                  <td style="font-family: monospace; font-weight: bold; text-align: center; width: 125px; padding: 4px 4px; font-size: 10.5px;">${escapeHtml(rightO.trackingId || '-')}</td>
+                  <td style="text-align: center; font-weight: 400; width: 26px; padding: 2.5px 2px; font-size: 8.5px; color: #475569;">${half + r + 1}</td>
+                  <td style="font-weight: 400; color: #0f172a; padding: 2.5px 4px; font-size: 8.5px;">${escapeHtml(rightO.studentName || '-')}</td>
+                  <td style="text-align: center; font-weight: 400; width: 44px; padding: 2.5px 2px; font-size: 8.5px; color: #334155;">${escapeHtml(rightO.weight || '-')}</td>
+                  <td style="font-family: monospace; font-weight: 400; text-align: center; width: 120px; padding: 2.5px 3px; font-size: 8.5px; color: #0f172a;">${escapeHtml(rightO.trackingId || '-')}</td>
                 `
                     : `
-                  <td style="width: 28px;"></td>
+                  <td style="width: 26px;"></td>
                   <td></td>
-                  <td style="width: 48px;"></td>
-                  <td style="width: 125px;"></td>
+                  <td style="width: 44px;"></td>
+                  <td style="width: 120px;"></td>
                 `
                 }
               </tr>
@@ -361,14 +361,14 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
             <table class="manifest-table">
               <thead>
                 <tr>
-                  <th style="width: 28px; text-align: center;">#</th>
+                  <th style="width: 26px; text-align: center;">#</th>
                   <th>STUDENT NAME</th>
-                  <th style="width: 48px; text-align: center;">WT</th>
-                  <th style="width: 125px; text-align: center; border-right: 2px solid #94a3b8;">TRACKING ID</th>
-                  <th style="width: 28px; text-align: center;">#</th>
+                  <th style="width: 44px; text-align: center;">WT</th>
+                  <th style="width: 120px; text-align: center; border-right: 2px solid #94a3b8;">TRACKING ID</th>
+                  <th style="width: 26px; text-align: center;">#</th>
                   <th>STUDENT NAME</th>
-                  <th style="width: 48px; text-align: center;">WT</th>
-                  <th style="width: 125px; text-align: center;">TRACKING ID</th>
+                  <th style="width: 44px; text-align: center;">WT</th>
+                  <th style="width: 120px; text-align: center;">TRACKING ID</th>
                 </tr>
               </thead>
               <tbody>
@@ -400,7 +400,7 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
         <style>
           @page {
             size: A4 portrait;
-            margin: 6mm 6mm 8mm 6mm;
+            margin: 8mm 6mm 8mm 18mm;
           }
           * {
             box-sizing: border-box;
@@ -408,32 +408,32 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           }
           body {
             margin: 0;
-            padding: 8px 10px;
+            padding: 8px 8px 8px 18mm;
             color: #1e293b;
             background: #fff;
-            font-size: 11px;
+            font-size: 9px;
           }
           .header-table {
             width: 100%;
-            border-bottom: 2.5px solid #dc2626;
-            padding-bottom: 4px;
-            margin-bottom: 8px;
+            border-bottom: 2px solid #dc2626;
+            padding-bottom: 3px;
+            margin-bottom: 6px;
           }
           .brand-title {
-            font-size: 20px;
-            font-weight: 900;
+            font-size: 16px;
+            font-weight: 800;
             color: #dc2626;
             letter-spacing: -0.5px;
             line-height: 1.1;
           }
           .brand-sub {
-            font-size: 10px;
-            font-weight: 600;
+            font-size: 8.5px;
+            font-weight: 400;
             color: #64748b;
           }
           .doc-title {
-            font-size: 14px;
-            font-weight: 800;
+            font-size: 12px;
+            font-weight: 700;
             color: #0f172a;
             text-transform: uppercase;
             text-align: right;
@@ -441,32 +441,36 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           .meta-pill {
             display: inline-block;
             background: #f1f5f9;
-            padding: 2px 7px;
+            padding: 2px 6px;
             border-radius: 4px;
-            font-size: 10px;
-            font-weight: 700;
+            font-size: 8.5px;
+            font-weight: 400;
             margin-top: 2px;
+            color: #334155;
+          }
+          .meta-pill strong {
+            font-weight: 600;
           }
           .courier-section {
-            margin-bottom: 16px;
+            margin-bottom: 12px;
           }
           .courier-banner {
             background: #0f172a;
             color: #fff;
-            padding: 4px 8px;
+            padding: 3px 8px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             page-break-after: avoid;
           }
           .courier-title {
-            font-size: 11.5px;
-            font-weight: 800;
-            letter-spacing: 0.5px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
           }
           .courier-meta {
-            font-size: 10px;
-            font-weight: 600;
+            font-size: 9px;
+            font-weight: 400;
             color: #cbd5e1;
           }
           .manifest-table {
@@ -481,28 +485,30 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
           }
           .manifest-table th {
             background: #f1f5f9;
-            color: #1e293b;
-            font-weight: 800;
-            font-size: 9.5px;
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 8.5px;
             text-transform: uppercase;
             letter-spacing: 0.3px;
             border: 1px solid #cbd5e1;
-            padding: 4px 4px;
+            padding: 3px 3px;
           }
           .manifest-table td {
             border: 1px solid #cbd5e1;
-            padding: 3.5px 4px;
-            font-size: 10px;
+            padding: 2.5px 3px;
+            font-size: 8.5px;
+            font-weight: 400;
             vertical-align: middle;
+            color: #1e293b;
           }
           .manifest-table tr:nth-child(even) {
             background-color: #f8fafc;
           }
           .signatures-box {
-            margin-top: 10px;
-            border: 1.5px solid #cbd5e1;
+            margin-top: 8px;
+            border: 1px solid #cbd5e1;
             border-radius: 4px;
-            padding: 8px 14px;
+            padding: 6px 12px;
             background: #fafafa;
             display: flex;
             justify-content: space-between;
@@ -512,16 +518,16 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
             width: 48%;
           }
           .sig-role {
-            font-weight: 800;
-            font-size: 10px;
+            font-weight: 700;
+            font-size: 8.5px;
             color: #0f172a;
             text-transform: uppercase;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
           }
           .sig-line {
-            font-size: 10.5px;
-            font-weight: 600;
-            color: #334155;
+            font-size: 9px;
+            font-weight: 400;
+            color: #475569;
           }
           @media print {
             body { padding: 0; }
@@ -810,39 +816,39 @@ export const DispatchReportModal: React.FC<DispatchReportModalProps> = ({
 
                           return (
                             <tr key={r} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-2 px-2.5 text-center font-bold text-slate-500">{r + 1}</td>
-                              <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[170px]" title={leftO.studentName}>
+                              <td className="py-1.5 px-2 text-center font-normal text-slate-500 text-[11px]">{r + 1}</td>
+                              <td className="py-1.5 px-2.5 font-normal text-slate-900 text-[11px] truncate max-w-[170px]" title={leftO.studentName}>
                                 {leftO.studentName}
                               </td>
-                              <td className="py-2 px-2 text-center font-semibold text-slate-800">
+                              <td className="py-1.5 px-2 text-center font-normal text-slate-700 text-[11px]">
                                 {leftO.weight ? (
-                                  <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                                  <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
                                     {leftO.weight}
                                   </span>
                                 ) : (
                                   <span className="text-slate-400">-</span>
                                 )}
                               </td>
-                              <td className="py-2 px-3 font-mono font-bold text-slate-900 text-center text-[11px] border-r-2 border-slate-300">
+                              <td className="py-1.5 px-2.5 font-mono font-normal text-slate-900 text-center text-[11px] border-r-2 border-slate-300">
                                 {leftO.trackingId || '-'}
                               </td>
 
                               {rightO ? (
                                 <>
-                                  <td className="py-2 px-2.5 text-center font-bold text-slate-500">{half + r + 1}</td>
-                                  <td className="py-2 px-3 font-bold text-slate-900 truncate max-w-[170px]" title={rightO.studentName}>
+                                  <td className="py-1.5 px-2 text-center font-normal text-slate-500 text-[11px]">{half + r + 1}</td>
+                                  <td className="py-1.5 px-2.5 font-normal text-slate-900 text-[11px] truncate max-w-[170px]" title={rightO.studentName}>
                                     {rightO.studentName}
                                   </td>
-                                  <td className="py-2 px-2 text-center font-semibold text-slate-800">
+                                  <td className="py-1.5 px-2 text-center font-normal text-slate-700 text-[11px]">
                                     {rightO.weight ? (
-                                      <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                                      <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
                                         {rightO.weight}
                                       </span>
                                     ) : (
                                       <span className="text-slate-400">-</span>
                                     )}
                                   </td>
-                                  <td className="py-2 px-3 font-mono font-bold text-slate-900 text-center text-[11px]">
+                                  <td className="py-1.5 px-2.5 font-mono font-normal text-slate-900 text-center text-[11px]">
                                     {rightO.trackingId || '-'}
                                   </td>
                                 </>
